@@ -57,8 +57,8 @@ jobs:
 
       - name: Build and Push Container
         run: |-
-          apt-get update -y
-          apt install git -y
+          sudo apt-get update -y
+          sudo apt install git -y
           git clone https://github.com/purplerelay/relay.git
           cd relay
           git checkout feature/devops
