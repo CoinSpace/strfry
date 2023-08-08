@@ -64,10 +64,10 @@ jobs:
           git checkout feature/devops
           cd ..
           sudo cp -r ./relay/utils .
-          gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev --quiet"
-          docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}" ./
-          docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}"
-          gcloud run deploy filesystem-app --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
+          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev --quiet"
+          sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/relay:${{ github.sha }}" ./
+          sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/relay:${{ github.sha }}"
+          sudo gcloud run deploy filesystem-app --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/relay:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
           
           
 
