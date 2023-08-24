@@ -44,6 +44,7 @@ jobs:
         uses: 'google-github-actions/auth@v0'
         with:
           credentials_json: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
+          service_account: '215007526460-compute@developer.gserviceaccount.com'
 
       # BEGIN - Docker auth and build (NOTE: If you already have a container image, these Docker steps can be omitted)
       # Authenticate Docker to Google Cloud Artifact Registry
@@ -82,6 +83,8 @@ jobs:
           sudo cp -r ./relay/utils .
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev --quiet"
           sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
+          echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' | docker login -u _json_key_base64 --password-stdin \
+            https://us-east1-docker.pkg.dev
           sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
           sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
 
