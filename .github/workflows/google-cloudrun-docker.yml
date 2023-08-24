@@ -85,7 +85,7 @@ jobs:
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
           #sudo cp -r ./relay/utils .
-          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
+          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
           docker build -t us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest .
           docker push us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest
           #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
