@@ -48,13 +48,13 @@ jobs:
 
       # BEGIN - Docker auth and build (NOTE: If you already have a container image, these Docker steps can be omitted)
       # Authenticate Docker to Google Cloud Artifact Registry
-      #- name: Docker Auth
-      #  id: docker-auth
-      #  uses: 'docker/login-action@v1'
-      #  with:
-      #    username: 'oauth2accesstoken'
-      #    password: '${{ steps.auth.outputs.access_token }}'
-      #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
+      - name: Docker Auth
+        id: docker-auth
+        uses: 'docker/login-action@v1'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+          registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
       - name: Update Repo
         run: |-
           sudo apt-get update -y
@@ -81,11 +81,11 @@ jobs:
       - name: Build and Push Container
         run: |-
           sudo cp -r ./relay/utils .
-          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
-          cat ~/.docker/config.json
-          echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > key.json
-          cat key.json
-          cat key.json | docker login -u _json_key_base64 --password-stdin https://us-east1-docker.pkg.dev
+          #sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
+          #cat ~/.docker/config.json
+          #echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > key.json
+          #cat key.json
+          #cat key.json | docker login -u _json_key_base64 --password-stdin https://us-east1-docker.pkg.dev
           sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
           sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
           sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
