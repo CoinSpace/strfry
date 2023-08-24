@@ -21,9 +21,9 @@ env:
 jobs:
   deploy:
     # Add 'id-token' with the intended permissions for workload identity federation
-    permissions:
-      contents: 'write'
-      id-token: 'write'
+    #permissions:
+    #  contents: 'write'
+    #  id-token: 'write'
 
     runs-on: ubuntu-latest
     steps:
@@ -41,10 +41,11 @@ jobs:
       # NOTE: Alternative option - authentication via credentials json
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v0'
+        uses: 'google-github-actions/setup-gcloud@v0'
         with:
-          credentials_json: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
-          service_account: '215007526460-compute@developer.gserviceaccount.com'
+          prokject_id: '${{ env.PROJECT_ID }}'
+          service_account_key: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
+          #service_account: '215007526460-compute@developer.gserviceaccount.com'
           export_default_credentials: true
 
       # BEGIN - Docker auth and build (NOTE: If you already have a container image, these Docker steps can be omitted)
@@ -56,37 +57,37 @@ jobs:
       #    username: 'oauth2accesstoken'
       #    password: '${{ steps.auth.outputs.access_token }}'
       #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
-      - name: Update Repo
-        run: |-
-          sudo apt-get update -y
-          sudo apt install git -y
-          git clone https://github.com/purplerelay/relay.git
-          cd relay
-          git checkout feature/devops
-          sudo apt-get install -y gnupg software-properties-common
-          wget -O- https://apt.releases.hashicorp.com/gpg | \
-            gpg --dearmor | \
-            sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          gpg --no-default-keyring \
-            --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-            --fingerprint
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
-            https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
-            sudo tee /etc/apt/sources.list.d/hashicorp.list
-          sudo apt update
-          sudo apt-get install terraform
-          terraform init
-          terraform workspace select gcp
-          terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
-          cd ..
+      #- name: Update Repo
+      #  run: |-
+      #    sudo apt-get update -y
+      #    sudo apt install git -y
+      #    git clone https://github.com/purplerelay/relay.git
+      #    cd relay
+      #    git checkout feature/devops
+      #    sudo apt-get install -y gnupg software-properties-common
+      #    wget -O- https://apt.releases.hashicorp.com/gpg | \
+      #      gpg --dearmor | \
+      #      sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      #    gpg --no-default-keyring \
+      #      --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+      #      --fingerprint
+      #    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+      #      https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+      #      sudo tee /etc/apt/sources.list.d/hashicorp.list
+      #    sudo apt update
+      #    sudo apt-get install terraform
+      #    terraform init
+      #    terraform workspace select gcp
+      #    terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
+      #    cd ..
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          sudo cp -r ./relay/utils .
-          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" -q
-          docker build -t us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/strfry .
-          docker push us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/strfry
+          #sudo cp -r ./relay/utils .
+          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
+          docker build -t us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest .
+          docker push us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest
           #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
           #sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
           #sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
