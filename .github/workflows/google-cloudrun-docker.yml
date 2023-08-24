@@ -81,7 +81,7 @@ jobs:
       - name: Build and Push Container
         run: |-
           sudo cp -r ./relay/utils .
-          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev --quiet"
+          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
           cat ~/.docker/config.json
           echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > key.json
           cat key.json
