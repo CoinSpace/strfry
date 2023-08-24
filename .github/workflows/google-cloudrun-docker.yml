@@ -84,7 +84,7 @@ jobs:
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
           sudo cp -r ./relay/utils .
-          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev"
+          sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" -q
           #cat ~/.docker/config.json
           #echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > key.json
           #cat key.json
