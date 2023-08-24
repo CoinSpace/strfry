@@ -54,7 +54,7 @@ jobs:
       #    username: 'oauth2accesstoken'
       #    password: '${{ steps.auth.outputs.access_token }}'
       #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
-      - name: Setup Git
+      - name: Update Repo
         run: |-
           sudo apt-get update -y
           sudo apt install git -y
