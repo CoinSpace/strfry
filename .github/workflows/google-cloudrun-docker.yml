@@ -75,7 +75,7 @@ jobs:
           sudo apt-get install terraform
           terraform init
           terraform workspace select gcp
-          terraform apply -auto-approve -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
+          terraform plan -auto-approve -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
           cd ..
       - name: Build and Push Container
         run: |-
