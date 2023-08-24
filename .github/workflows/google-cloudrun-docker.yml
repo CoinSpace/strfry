@@ -22,7 +22,7 @@ jobs:
   deploy:
     # Add 'id-token' with the intended permissions for workload identity federation
     permissions:
-      contents: 'read'
+      contents: 'write'
       id-token: 'write'
 
     runs-on: ubuntu-latest
