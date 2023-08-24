@@ -43,7 +43,7 @@ jobs:
         id: auth
         uses: 'google-github-actions/setup-gcloud@v0'
         with:
-          prokject_id: '${{ env.PROJECT_ID }}'
+          project_id: '${{ env.PROJECT_ID }}'
           service_account_key: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
           #service_account: '215007526460-compute@developer.gserviceaccount.com'
           export_default_credentials: true
@@ -57,13 +57,15 @@ jobs:
       #    username: 'oauth2accesstoken'
       #    password: '${{ steps.auth.outputs.access_token }}'
       #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
-      #- name: Update Repo
-      #  run: |-
-      #    sudo apt-get update -y
-      #    sudo apt install git -y
-      #    git clone https://github.com/purplerelay/relay.git
-      #    cd relay
-      #    git checkout feature/devops
+      #
+      - name: Update Repo
+        run: |-
+          sudo apt-get update -y
+          sudo apt install git -y
+          git clone https://github.com/purplerelay/relay.git
+          cd relay
+          git checkout feature/devops
+          cd ..
       #    sudo apt-get install -y gnupg software-properties-common
       #    wget -O- https://apt.releases.hashicorp.com/gpg | \
       #      gpg --dearmor | \
@@ -79,7 +81,7 @@ jobs:
       #    terraform init
       #    terraform workspace select gcp
       #    terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
-      #    cd ..
+          
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
