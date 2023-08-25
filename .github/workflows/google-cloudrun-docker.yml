@@ -88,11 +88,11 @@ jobs:
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
-          docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest .
-          docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest
+          docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/nginx:latest .
+          docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/nginx:latest
           #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
           #sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
-          #sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
+          #gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
       # END - Docker auth and build
 
       #- name: Deploy to Cloud Run
