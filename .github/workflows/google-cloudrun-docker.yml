@@ -81,14 +81,14 @@ jobs:
           sudo chmod +x ./utils/generate_array.sh
           sudo ./utils/generate_array.sh ${{ env.REGIONS }}
           echo "regions=$(cat regions.txt)" > regions.tfvars
-          terraform apply -auto-approve -var-file=regions.tfvars -var='environment=${{ env.TYPE }}' -lock=false
+          terraform plan -var-file=regions.tfvars -var='environment=${{ env.TYPE }}' -lock=false
           cd ..
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          #rm -f Dockerfile
-          #sudo cp -r ./relay/utils/* ./
+          rm -f Dockerfile
+          sudo cp -r ./relay/utils/* ./
           sudo cp -r ./relay/utils/deploy_cloud_run.sh ./deploy_cloud_run.sh
           echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > application_default_credentials.json
           export X=$(gcloud auth print-access-token)
