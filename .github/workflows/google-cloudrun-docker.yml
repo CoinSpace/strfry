@@ -84,7 +84,8 @@ jobs:
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          sudo cp -r ./relay/utils .
+          rm -f Dockerfile
+          sudo cp -r ./relay/utils ./
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
