@@ -43,7 +43,7 @@ jobs:
         id: auth
         uses: 'google-github-actions/setup-gcloud@v0'
         with:
-          project_id: '${{ env.PROJECT_ID }}'
+          prokject_id: '${{ env.PROJECT_ID }}'
           service_account_key: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
           #service_account: '215007526460-compute@developer.gserviceaccount.com'
           export_default_credentials: true
@@ -57,15 +57,13 @@ jobs:
       #    username: 'oauth2accesstoken'
       #    password: '${{ steps.auth.outputs.access_token }}'
       #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
-      #
-      - name: Update Repo
-        run: |-
-          sudo apt-get update -y
-          sudo apt install git -y
-          git clone https://github.com/purplerelay/relay.git
-          cd relay
-          git checkout feature/devops
-          cd ..
+      #- name: Update Repo
+      #  run: |-
+      #    sudo apt-get update -y
+      #    sudo apt install git -y
+      #    git clone https://github.com/purplerelay/relay.git
+      #    cd relay
+      #    git checkout feature/devops
       #    sudo apt-get install -y gnupg software-properties-common
       #    wget -O- https://apt.releases.hashicorp.com/gpg | \
       #      gpg --dearmor | \
@@ -81,18 +79,19 @@ jobs:
       #    terraform init
       #    terraform workspace select gcp
       #    terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
-          
+      #    cd ..
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          sudo cp -r ./relay/utils .
+          #sudo cp -r ./relay/utils .
           docker login -u oauth2accesstoken -p "${{ secrets.DOCKER_PASSWORD }}" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
-          sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" .
-          sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
-          sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-east1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
-
+          docker build -t us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest .
+          docker push us-east1-docker.pkg.dev/purplerelay/purplerelay-registry-dev/nginx:latest
+          #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
+          #sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
+          #sudo gcloud run deploy ${{ env.PROJECT_ID }}-us-west1-app-${{ env.TYPE }} --image ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} --update-env-vars BUCKET=${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-bucket-${{ env.TYPE }}
       # END - Docker auth and build
 
       #- name: Deploy to Cloud Run
