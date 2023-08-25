@@ -78,8 +78,9 @@ jobs:
           sudo apt-get install terraform
           terraform init
           terraform workspace select gcp
-          export GENERATED_ARRAY=$(echo "${{ env.REGIONS }}" | tr ' ' ',')
-          terraform plan -var='regions=[ $GENERATED_ARRAY ]' -var='environment=${{ env.TYPE }}' -lock=false
+          sudo chmod +x ./utils/generate_array.sh
+          sudo ./utils/generate_array.sh
+          terraform plan -var='regions=$GENERATED_ARRAY' -var='environment=${{ env.TYPE }}' -lock=false
           cd ..
       - name: Build and Push Container
         env: 
