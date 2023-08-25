@@ -79,7 +79,7 @@ jobs:
           terraform init
           terraform workspace select gcp
           sudo chmod +x ./utils/generate_array.sh
-          sudo ./utils/generate_array.sh
+          sudo ./utils/generate_array.sh ${{ env.REGIONS }}
           terraform plan -var='regions=$GENERATED_ARRAY' -var='environment=${{ env.TYPE }}' -lock=false
           cd ..
       - name: Build and Push Container
