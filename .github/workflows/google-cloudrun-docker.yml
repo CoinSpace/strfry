@@ -57,34 +57,34 @@ jobs:
       #    username: 'oauth2accesstoken'
       #    password: '${{ steps.auth.outputs.access_token }}'
       #    registry: '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev'
-      #- name: Update Repo
-      #  run: |-
-      #    sudo apt-get update -y
-      #    sudo apt install git -y
-      #    git clone https://github.com/purplerelay/relay.git
-      #    cd relay
-      #    git checkout feature/devops
-      #    sudo apt-get install -y gnupg software-properties-common
-      #    wget -O- https://apt.releases.hashicorp.com/gpg | \
-      #      gpg --dearmor | \
-      #      sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
-      #    gpg --no-default-keyring \
-      #      --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-      #      --fingerprint
-      #    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
-      #      https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
-      #      sudo tee /etc/apt/sources.list.d/hashicorp.list
-      #    sudo apt update
-      #    sudo apt-get install terraform
-      #    terraform init
-      #    terraform workspace select gcp
-      #    terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
-      #    cd ..
+      - name: Update Repo
+        run: |-
+          sudo apt-get update -y
+          sudo apt install git -y
+          git clone https://github.com/purplerelay/relay.git
+          cd relay
+          git checkout feature/devops
+          sudo apt-get install -y gnupg software-properties-common
+          wget -O- https://apt.releases.hashicorp.com/gpg | \
+            gpg --dearmor | \
+            sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+            --fingerprint
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+            https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+            sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt update
+          sudo apt-get install terraform
+          terraform init
+          terraform workspace select gcp
+          terraform plan -var='regions=["us-east1", "us-west1"]' -var='environment=${{ env.TYPE }}'
+          cd ..
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          #sudo cp -r ./relay/utils .
+          sudo cp -r ./relay/utils .
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
