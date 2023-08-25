@@ -86,7 +86,7 @@ jobs:
         run: |-
           rm -f Dockerfile
           sudo cp -r ./relay/utils/* ./
-          echo ${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }} > application_default_credentials.json
+          echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > application_default_credentials.json
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
