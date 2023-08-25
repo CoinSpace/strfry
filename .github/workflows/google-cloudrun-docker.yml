@@ -15,7 +15,7 @@ env:
   PROJECT_ID: purplerelay #update Google Cloud project id
   SERVICE: purplerelay-registry-dev #update Cloud Run service name
   REGISTRY_LOCATION: us-east1 #update Artifact Registry location
-  REGIONS: us-east1 #update Cloud Run service region
+  REGIONS: us-east1 us-west1 #update Cloud Run service region
   TYPE: dev
 
 jobs:
@@ -92,9 +92,11 @@ jobs:
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
           docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} .
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}
-          #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
-          #sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
-          gcloud run deploy '${{ env.PROJECT_ID }}-${{ env.REGISTRY_LOCATION }}-app-${{ env.TYPE }}' --project '${{ env.PROJECT_ID }}' --region '${{ env.REGISTRY_LOCATION }}' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'${{ env.REGISTRY_LOCATION }}'-bucket-'${{ env.TYPE }}'
+          for REGION in '${{ env.REGIONS }}'
+          do
+             gcloud run deploy '${{ env.PROJECT_ID }}-$REGION-app-${{ env.TYPE }}' --project '${{ env.PROJECT_ID }}' --region '$REGION' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$REGION'-bucket-'${{ env.TYPE }}'
+          done
+          
       # END - Docker auth and build
 
       #- name: Deploy to Cloud Run
