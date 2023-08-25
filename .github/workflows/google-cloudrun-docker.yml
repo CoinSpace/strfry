@@ -92,9 +92,9 @@ jobs:
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
           docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} .
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}
-          for REGION in '${{ env.REGIONS }}'
+          for region in '${{ env.REGIONS }}'
           do
-             gcloud run deploy '${{ env.PROJECT_ID }}-$REGION-app-${{ env.TYPE }}' --project '${{ env.PROJECT_ID }}' --region '$REGION' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$REGION'-bucket-'${{ env.TYPE }}'
+             gcloud run deploy '${{ env.PROJECT_ID }}-'$region'-app-${{ env.TYPE }}' --project '${{ env.PROJECT_ID }}' --region $region --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$REGION'-bucket-'${{ env.TYPE }}'
           done
           
       # END - Docker auth and build
