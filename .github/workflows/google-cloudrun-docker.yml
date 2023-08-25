@@ -81,7 +81,7 @@ jobs:
           sudo chmod +x ./utils/generate_array.sh
           sudo ./utils/generate_array.sh ${{ env.REGIONS }}
           echo regions=$GENERATED_ARRAY > regions.tfvars
-          terraform plan -var-file=regions.tfvers -var='environment=${{ env.TYPE }}' -lock=false
+          terraform plan -var-file=regions.tfvars -var='environment=${{ env.TYPE }}' -lock=false
           cd ..
       - name: Build and Push Container
         env: 
