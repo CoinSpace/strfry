@@ -92,7 +92,7 @@ jobs:
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest
           #sudo docker build -t "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}" ./
           #sudo docker push "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}"
-          gcloud run deploy '${{ env.PROJECT_ID }}-{{ env.REGISTRY_LOCATION }}-app-${{ env.TYPE }}' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET=purplerelay-us-east1-bucket-dev
+          gcloud run deploy '${{ env.PROJECT_ID }}-{{ env.REGISTRY_LOCATION }}-app-${{ env.TYPE }}' --project '${{ env.PROJECT_ID }}' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET=purplerelay-us-east1-bucket-dev
       # END - Docker auth and build
 
       #- name: Deploy to Cloud Run
