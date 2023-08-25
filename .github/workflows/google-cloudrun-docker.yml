@@ -84,8 +84,8 @@ jobs:
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          rm -f Dockerfile
-          sudo cp -r ./relay/utils/* ./
+          #rm -f Dockerfile
+          #sudo cp -r ./relay/utils/* ./
           echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > application_default_credentials.json
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
@@ -94,7 +94,8 @@ jobs:
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}
           for region in '${{ env.REGIONS }}'
           do
-             gcloud run deploy ${{ env.PROJECT_ID }}-$region-app-${{ env.TYPE }} --project '${{ env.PROJECT_ID }}' --region '$region' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$region-bucket-${{ env.TYPE }}'
+             export PROJ_NAME=${{ env.PROJECT_ID }}-$region-app-${{ env.TYPE }}
+             gcloud run deploy $PROJ_NAME --project '${{ env.PROJECT_ID }}' --region '$region' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$region-bucket-${{ env.TYPE }}'
           done
           
       # END - Docker auth and build
