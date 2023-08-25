@@ -95,8 +95,8 @@ jobs:
           for region in '${{ env.REGIONS }}'
           do
              echo "$region"
-             export ID = "${{ env.PROJECT_ID }}"
-             export ENV_TYPE = "${{ env.TYPE }}"
+             export ID="${{ env.PROJECT_ID }}"
+             export ENV_TYPE="${{ env.TYPE }}"
              export PROJ_NAME="$ID-$region-app-$ENV_TYPE"
              echo $PROJ_NAME
              gcloud run deploy $PROJ_NAME --project '${{ env.PROJECT_ID }}' --region '$region' --image '${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}' --update-env-vars BUCKET='${{ env.PROJECT_ID }}'-'$region-bucket-${{ env.TYPE }}'
