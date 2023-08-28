@@ -94,10 +94,10 @@ jobs:
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
-          docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }} .
-          docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:${{ github.sha }}
+          docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest .
+          docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest
           sudo chmod +x deploy_cloud_run.sh
-          sudo ./deploy_cloud_run.sh "${{ env.PROJECT_ID }}" "${{ env.TYPE }}" "${{ env.SERVICE }}" "${{ github.sha }}" "${{ env.REGIONS }}"
+          sudo ./deploy_cloud_run.sh "${{ env.PROJECT_ID }}" "${{ env.TYPE }}" "${{ env.SERVICE }}" "latest" "${{ env.REGIONS }}"
           
       # END - Docker auth and build
 
