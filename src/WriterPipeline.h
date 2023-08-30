@@ -50,7 +50,7 @@ struct WriterPipeline {
                         shutdownRequested = true;
                         writerInbox.push_move({});
                         shutdownCv.notify_all();
-                        break;
+                        return;
                     }
 
                     std::string flatStr;
@@ -143,11 +143,18 @@ struct WriterPipeline {
                 if (shutdownComplete) {
                     flushInbox.push_move(true);
                     if (numLive != 0) LW << "numLive was not 0 after shutdown!";
+                    return;
                 }
 
                 backpressureCv.notify_all();
             }
         });
+    }
+
+    ~WriterPipeline() {
+        flush();
+        validatorThread.join();
+        writerThread.join();
     }
 
     void write(WriterPipelineInput &&inp) {

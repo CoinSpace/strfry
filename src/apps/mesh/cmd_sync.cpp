@@ -48,7 +48,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
     tao::json::value filter = tao::json::from_string(filterStr);
 
 
-    Negentropy ne(idSize);
+    Negentropy ne(idSize, frameSizeLimit);
 
     {
         DBQuery query(filter);
@@ -57,16 +57,22 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
         auto txn = env.txn_ro();
 
         uint64_t numEvents = 0;
+        std::vector<uint64_t> levIds;
 
         while (1) {
-            bool complete = query.process(txn, [&](const auto &sub, uint64_t levId, std::string_view eventPayload){
-                auto ev = lookupEventByLevId(txn, levId);
-                ne.addItem(ev.flat_nested()->created_at(), sv(ev.flat_nested()->id()).substr(0, ne.idSize));
-
+            bool complete = query.process(txn, [&](const auto &sub, uint64_t levId){
+                levIds.push_back(levId);
                 numEvents++;
             });
 
             if (complete) break;
+        }
+
+        std::sort(levIds.begin(), levIds.end());
+
+        for (auto levId : levIds) {
+            auto ev = lookupEventByLevId(txn, levId);
+            ne.addItem(ev.flat_nested()->created_at(), sv(ev.flat_nested()->id()).substr(0, ne.idSize));
         }
 
         LI << "Filter matches " << numEvents << " events";
@@ -84,7 +90,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
     ws.reconnect = false;
 
     ws.onConnect = [&]{
-        auto neMsg = to_hex(ne.initiate(frameSizeLimit));
+        auto neMsg = to_hex(ne.initiate());
         ws.send(tao::json::to_string(tao::json::value::array({
             "NEG-OPEN",
             "N",
@@ -92,6 +98,15 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
             idSize,
             neMsg,
         })));
+    };
+
+    auto doExit = [&](int status){
+        if (doDown) writer.flush();
+        ::exit(status);
+    };
+
+    ws.onDisconnect = ws.onError = [&]{
+        doExit(1);
     };
 
 
@@ -122,6 +137,11 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 if (neMsg.size() == 0) {
                     syncDone = true;
                     LI << "Set reconcile complete. Have " << totalHaves << " need " << totalNeeds;
+
+                    ws.send(tao::json::to_string(tao::json::value::array({
+                        "NEG-CLOSE",
+                        "N",
+                    })));
                 } else {
                     ws.send(tao::json::to_string(tao::json::value::array({
                         "NEG-MSG",
@@ -151,7 +171,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 writer.wait();
             } else if (msg.at(0) == "NEG-ERR") {
                 LE << "Got NEG-ERR response from relay: " << msg;
-                ::exit(1);
+                doExit(1);
             } else {
                 LW << "Unexpected message from relay: " << msg;
             }
@@ -209,8 +229,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
         }
 
         if (syncDone && have.size() == 0 && need.size() == 0 && inFlightUp == 0 && !inFlightDown) {
-            if (doDown) writer.flush();
-            ::exit(0);
+            doExit(0);
         }
     };
 

@@ -10,8 +10,8 @@ class WSConnection {
     std::string url;
 
     uWS::Hub hub;
-    uWS::Group<uWS::CLIENT> *hubGroup;
-    std::unique_ptr<uS::Async> hubTrigger;
+    uWS::Group<uWS::CLIENT> *hubGroup = nullptr;
+    uS::Async *hubTrigger = nullptr;
 
     uWS::WebSocket<uWS::CLIENT> *currWs = nullptr;
 
@@ -23,9 +23,23 @@ class WSConnection {
     std::function<void()> onConnect;
     std::function<void(std::string_view, uWS::OpCode, size_t)> onMessage;
     std::function<void()> onTrigger;
+    std::function<void()> onDisconnect;
+    std::function<void()> onError;
     bool reconnect = true;
     uint64_t reconnectDelayMilliseconds = 5'000;
     std::string remoteAddr;
+
+    ~WSConnection() {
+        close();
+    }
+
+    void close() {
+        if (hubGroup) hubGroup->close();
+        hubGroup = nullptr;
+
+        if (hubTrigger) hubTrigger->close();
+        hubTrigger = nullptr;
+    }
 
     // Should only be called from the websocket thread (ie within an onConnect or onMessage callback)
     void send(std::string_view msg, uWS::OpCode op = uWS::OpCode::TEXT, size_t *compressedSize = nullptr) {
@@ -84,8 +98,8 @@ class WSConnection {
             if (ws == currWs) {
                 currWs = nullptr;
 
-                if (!reconnect) ::exit(1);
-                doConnect(reconnectDelayMilliseconds);
+                if (onDisconnect) onDisconnect();
+                if (reconnect) doConnect(reconnectDelayMilliseconds);
             } else {
                 LI << "Got disconnect for unexpected connection?";
             }
@@ -94,8 +108,8 @@ class WSConnection {
         hubGroup->onError([&](void *) {
             LI << "Websocket connection error";
 
-            if (!reconnect) ::exit(1);
-            doConnect(reconnectDelayMilliseconds);
+            if (onError) onError();
+            if (reconnect) doConnect(reconnectDelayMilliseconds);
         });
 
         hubGroup->onMessage2([&](uWS::WebSocket<uWS::CLIENT> *ws, char *message, size_t length, uWS::OpCode opCode, size_t compressedSize) {
@@ -118,7 +132,7 @@ class WSConnection {
             }
         };
 
-        hubTrigger = std::make_unique<uS::Async>(hub.getLoop());
+        hubTrigger = new uS::Async(hub.getLoop());
         hubTrigger->setData(&asyncCb);
 
         hubTrigger->start([](uS::Async *a){

@@ -1,3 +1,7 @@
+set argv in plugin processes, propagate environment
+remove lookbehind, receivedAt index
+get rid of "too many tags in filter" error
+
 1.0 release
   split plugins for relay/stream
   test negentropy queries stored in events
@@ -28,4 +32,5 @@ rate limits (maybe not needed now that we have plugins?)
 
 misc
   ? periodic reaping of disconnected sockets (maybe autoping is doing this already)
-  ? why isn't the LMDB mapping CLOEXEC
+  ? warn when run as root
+  docs: mention you have to run `make update-submodules` after a pull

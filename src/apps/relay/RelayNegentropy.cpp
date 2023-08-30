@@ -1,7 +1,6 @@
 #include <Negentropy.h>
 
 #include "RelayServer.h"
-#include "DBQuery.h"
 #include "QueryScheduler.h"
 
 
@@ -9,6 +8,7 @@ struct NegentropyViews {
     struct UserView {
         Negentropy ne;
         std::string initialMsg;
+        std::vector<uint64_t> levIds;
         uint64_t startTime = hoytech::curr_time_us();
     };
 
@@ -28,7 +28,7 @@ struct NegentropyViews {
             return false;
         }
 
-        connViews.try_emplace(subId, UserView{ Negentropy(idSize), initialMsg });
+        connViews.try_emplace(subId, UserView{ Negentropy(idSize, 500'000), initialMsg });
 
         return true;
     }
@@ -63,25 +63,26 @@ void RelayServer::runNegentropy(ThreadPool<MsgNegentropy>::Thread &thr) {
     QueryScheduler queries;
     NegentropyViews views;
 
+    queries.ensureExists = false;
+
     queries.onEventBatch = [&](lmdb::txn &txn, const auto &sub, const std::vector<uint64_t> &levIds){
         auto *view = views.findView(sub.connId, sub.subId);
         if (!view) return;
 
         for (auto levId : levIds) {
-            auto ev = lookupEventByLevId(txn, levId);
-            view->ne.addItem(ev.flat_nested()->created_at(), sv(ev.flat_nested()->id()).substr(0, view->ne.idSize));
+            view->levIds.push_back(levId);
         }
     };
 
-    queries.onComplete = [&](Subscription &sub){
+    queries.onComplete = [&](lmdb::txn &txn, Subscription &sub){
         auto *view = views.findView(sub.connId, sub.subId);
         if (!view) return;
 
-        LI << "[" << sub.connId << "] Negentropy query matched " << view->ne.items.size() << " events in "
+        LI << "[" << sub.connId << "] Negentropy query matched " << view->levIds.size() << " events in "
            << (hoytech::curr_time_us() - view->startTime) << "us";
 
-        if (view->ne.items.size() > cfg().relay__negentropy__maxSyncEvents) {
-            LI << "[" << sub.connId << "] Negentropy query size exceeeded " << cfg().relay__negentropy__maxSyncEvents;
+        if (view->levIds.size() > cfg().relay__negentropy__maxSyncEvents) {
+            LI << "[" << sub.connId << "] Negentropy query size exceeded " << cfg().relay__negentropy__maxSyncEvents;
 
             sendToConn(sub.connId, tao::json::to_string(tao::json::value::array({
                 "NEG-ERR",
@@ -93,6 +94,20 @@ void RelayServer::runNegentropy(ThreadPool<MsgNegentropy>::Thread &thr) {
             views.removeView(sub.connId, sub.subId);
             return;
         }
+
+        std::sort(view->levIds.begin(), view->levIds.end());
+
+        for (auto levId : view->levIds) {
+            try {
+                auto ev = lookupEventByLevId(txn, levId);
+                view->ne.addItem(ev.flat_nested()->created_at(), sv(ev.flat_nested()->id()).substr(0, view->ne.idSize));
+            } catch (std::exception &) {
+                // levId was deleted when query was paused
+            }
+        }
+
+        view->levIds.clear();
+        view->levIds.shrink_to_fit();
 
         view->ne.seal();
 
