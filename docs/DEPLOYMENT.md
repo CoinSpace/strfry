@@ -42,7 +42,7 @@ While you wait for your server to provision, go to your DNS provider and point a
         cd strfry
 
         # Install complication dependencies
-        sudo apt install -y install nginx git build-essential libyaml-perl libtemplate-perl libregexp-grammars-perl libssl-dev zlib1g-dev liblmdb-dev libflatbuffers-dev libsecp256k1-dev libzstd-dev ufw
+        sudo apt install -y nginx git build-essential libyaml-perl libtemplate-perl libregexp-grammars-perl libssl-dev zlib1g-dev liblmdb-dev libflatbuffers-dev libsecp256k1-dev libzstd-dev ufw
 
         # Build it
         git submodule update --init
