@@ -9,7 +9,7 @@ name: Build and Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "feature/update-nginx" ]
+    branches: [ "feature/devops" ]
 
 env:
   PROJECT_ID: purplerelay #update Google Cloud project id
