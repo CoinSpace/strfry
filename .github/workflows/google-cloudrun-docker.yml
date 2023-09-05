@@ -9,13 +9,13 @@ name: Build and Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "feature/devops" ]
+    branches: [ "feature/devops", "feature/update-nginx" ]
 
 env:
   PROJECT_ID: purplerelay #update Google Cloud project id
   SERVICE: purplerelay-registry-dev #update Cloud Run service name
   REGISTRY_LOCATION: us-east1 #update Artifact Registry location
-  REGIONS: us-east1 us-west1 southamerica-east1 us-central1 #update Cloud Run service region
+  REGIONS: us-east1 us-west1 southamerica-east1 us-central1 us-south1 #update Cloud Run service region
   TYPE: dev
 
 jobs:
@@ -63,7 +63,8 @@ jobs:
           sudo apt install git -y
           git clone https://github.com/purplerelay/relay.git
           cd relay
-          git checkout feature/devops
+          # git checkout feature/devops
+          git checkout feature/update-nginx
           sudo apt-get install -y gnupg software-properties-common
           wget -O- https://apt.releases.hashicorp.com/gpg | \
             gpg --dearmor | \
