@@ -16,29 +16,28 @@
 #include "golpe.h"
 
 
-enum class WritePolicyResult {
+enum class PluginEventSifterResult {
     Accept,
     Reject,
     ShadowReject,
 };
 
 
-struct PluginWritePolicy {
+struct PluginEventSifter {
     struct RunningPlugin {
         pid_t pid;
-        std::string currPluginPath;
-        uint64_t lookbackSeconds;
+        std::string currPluginCmd;
         struct timespec lastModTime;
         FILE *r;
         FILE *w;
 
-        RunningPlugin(pid_t pid, int rfd, int wfd, std::string currPluginPath, uint64_t lookbackSeconds) : pid(pid), currPluginPath(currPluginPath), lookbackSeconds(lookbackSeconds) {
+        RunningPlugin(pid_t pid, int rfd, int wfd, std::string currPluginCmd) : pid(pid), currPluginCmd(currPluginCmd) {
             r = fdopen(rfd, "r");
             w = fdopen(wfd, "w");
             setlinebuf(w);
             {
                 struct stat statbuf;
-                if (stat(currPluginPath.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", currPluginPath);
+                if (stat(currPluginCmd.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", currPluginCmd);
                 lastModTime = statbuf.st_mtim;
             }
         }
@@ -53,21 +52,19 @@ struct PluginWritePolicy {
 
     std::unique_ptr<RunningPlugin> running; 
 
-    WritePolicyResult acceptEvent(const tao::json::value &evJson, uint64_t receivedAt, EventSourceType sourceType, std::string_view sourceInfo, std::string &okMsg) {
-        const auto &pluginPath = cfg().relay__writePolicy__plugin;
-
-        if (pluginPath.size() == 0) {
+    PluginEventSifterResult acceptEvent(const std::string &pluginCmd, const tao::json::value &evJson, uint64_t receivedAt, EventSourceType sourceType, std::string_view sourceInfo, std::string &okMsg) {
+        if (pluginCmd.size() == 0) {
             running.reset();
-            return WritePolicyResult::Accept;
+            return PluginEventSifterResult::Accept;
         }
 
         try {
             if (running) {
-                if (pluginPath != running->currPluginPath || cfg().relay__writePolicy__lookbackSeconds != running->lookbackSeconds) {
+                if (pluginCmd != running->currPluginCmd) {
                     running.reset();
                 } else {
                     struct stat statbuf;
-                    if (stat(pluginPath.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", pluginPath);
+                    if (stat(pluginCmd.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", pluginCmd);
                     if (statbuf.st_mtim.tv_sec != running->lastModTime.tv_sec || statbuf.st_mtim.tv_nsec != running->lastModTime.tv_nsec) {
                         running.reset();
                     }
@@ -75,8 +72,7 @@ struct PluginWritePolicy {
             }
 
             if (!running) {
-                setupPlugin();
-                sendLookbackEvents();
+                setupPlugin(pluginCmd);
             }
 
             auto request = tao::json::value({
@@ -113,15 +109,15 @@ struct PluginWritePolicy {
             okMsg = response.optional<std::string>("msg").value_or("");
 
             auto action = response.at("action").get_string();
-            if (action == "accept") return WritePolicyResult::Accept;
-            else if (action == "reject") return WritePolicyResult::Reject;
-            else if (action == "shadowReject") return WritePolicyResult::ShadowReject;
+            if (action == "accept") return PluginEventSifterResult::Accept;
+            else if (action == "reject") return PluginEventSifterResult::Reject;
+            else if (action == "shadowReject") return PluginEventSifterResult::ShadowReject;
             else throw herr("unknown action: ", action);
         } catch (std::exception &e) {
-            LE << "Couldn't setup PluginWritePolicy: " << e.what();
+            LE << "Couldn't setup plugin: " << e.what();
             running.reset();
             okMsg = "error: internal error";
-            return WritePolicyResult::Reject;
+            return PluginEventSifterResult::Reject;
         }
     }
 
@@ -151,15 +147,15 @@ struct PluginWritePolicy {
         }
     };
 
-    void setupPlugin() {
-        auto path = cfg().relay__writePolicy__plugin;
-        LI << "Setting up write policy plugin: " << path;
+  private:
+    void setupPlugin(const std::string &pluginCmd) {
+        LI << "Setting up write policy plugin: " << pluginCmd;
 
         Pipe outPipe;
         Pipe inPipe;
 
         pid_t pid;
-        char *argv[] = { nullptr, };
+        const char * const argv[] = { "/bin/sh", "-c", pluginCmd.c_str(), nullptr, };
 
         posix_spawn_file_actions_t file_actions;
 
@@ -173,43 +169,9 @@ struct PluginWritePolicy {
             posix_spawn_file_actions_addclose(&file_actions, inPipe.fds[1])
         ) throw herr("posix_span_file_actions failed: ", strerror(errno));
 
-        auto ret = posix_spawn(&pid, path.c_str(), &file_actions, nullptr, argv, nullptr);
-        if (ret) throw herr("posix_spawn failed to invoke '", path, "': ", strerror(errno));
+        auto ret = posix_spawnp(&pid, "sh", &file_actions, nullptr, (char* const*)(&argv[0]), environ);
+        if (ret) throw herr("posix_spawn failed to invoke '", pluginCmd, "': ", strerror(errno));
 
-        running = make_unique<RunningPlugin>(pid, inPipe.saveFd(0), outPipe.saveFd(1), path, cfg().relay__writePolicy__lookbackSeconds);
-    }
-
-    void sendLookbackEvents() {
-        if (running->lookbackSeconds == 0) return;
-
-        Decompressor decomp;
-        auto now = hoytech::curr_time_us();
-
-        uint64_t start = now - (running->lookbackSeconds * 1'000'000);
-
-        auto txn = env.txn_ro();
-
-        env.generic_foreachFull(txn, env.dbi_Event__receivedAt, lmdb::to_sv<uint64_t>(start), lmdb::to_sv<uint64_t>(0), [&](auto k, auto v) {
-            if (lmdb::from_sv<uint64_t>(k) > now) return false;
-
-            auto ev = lookupEventByLevId(txn, lmdb::from_sv<uint64_t>(v));
-            auto sourceType = (EventSourceType)ev.sourceType();
-            std::string_view sourceInfo = ev.sourceInfo();
-
-            auto request = tao::json::value({
-                { "type", "lookback" },
-                { "event", tao::json::from_string(getEventJson(txn, decomp, ev.primaryKeyId)) },
-                { "receivedAt", ev.receivedAt() / 1000000 },
-                { "sourceType", eventSourceTypeToStr(sourceType) },
-                { "sourceInfo", sourceType == EventSourceType::IP4 || sourceType == EventSourceType::IP6 ? renderIP(sourceInfo) : sourceInfo },
-            });
-
-            std::string output = tao::json::to_string(request);
-            output += "\n";
-
-            if (::fwrite(output.data(), 1, output.size(), running->w) != output.size()) throw herr("error writing to plugin");
-
-            return true;
-        });
+        running = make_unique<RunningPlugin>(pid, inPipe.saveFd(0), outPipe.saveFd(1), pluginCmd);
     }
 };
