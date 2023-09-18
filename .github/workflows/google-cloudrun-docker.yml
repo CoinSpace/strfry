@@ -43,7 +43,7 @@ jobs:
         id: auth
         uses: 'google-github-actions/setup-gcloud@v0'
         with:
-          prokject_id: '${{ env.PROJECT_ID }}'
+          project_id: '${{ env.PROJECT_ID }}'
           service_account_key: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
           #service_account: '215007526460-compute@developer.gserviceaccount.com'
           export_default_credentials: true
