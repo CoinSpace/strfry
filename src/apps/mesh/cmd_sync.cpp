@@ -134,19 +134,19 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 if (!doUp) have.clear();
                 if (!doDown) need.clear();
 
-                if (neMsg.size() == 0) {
+                if (neMsg) {
+                    ws.send(tao::json::to_string(tao::json::value::array({
+                        "NEG-MSG",
+                        "N",
+                        to_hex(*neMsg),
+                    })));
+                } else {
                     syncDone = true;
                     LI << "Set reconcile complete. Have " << totalHaves << " need " << totalNeeds;
 
                     ws.send(tao::json::to_string(tao::json::value::array({
                         "NEG-CLOSE",
                         "N",
-                    })));
-                } else {
-                    ws.send(tao::json::to_string(tao::json::value::array({
-                        "NEG-MSG",
-                        "N",
-                        to_hex(neMsg),
                     })));
                 }
             } else if (msg.at(0) == "OK") {
@@ -160,11 +160,11 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 auto &evJson = msg.at(2);
 
                 std::string okMsg;
-                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, hoytech::curr_time_s(), EventSourceType::Sync, ws.remoteAddr, okMsg);
+                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, hoytech::curr_time_us(), EventSourceType::Sync, ws.remoteAddr, okMsg);
                 if (res == PluginEventSifterResult::Accept) {
                     writer.write({ std::move(evJson), EventSourceType::Sync, url });
                 } else {
-                    LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
+                    if (okMsg.size()) LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
                 }
             } else if (msg.at(0) == "EOSE") {
                 inFlightDown = false;

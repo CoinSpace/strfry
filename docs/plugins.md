@@ -1,6 +1,6 @@
-# Write policy plugins
+# Event-sifter plugins
 
-In order to reduce complexity, strfry's design attempts to keep policy logic out of its core relay functionality. Instead, this logic can be implemented by operators by installing a write policy plugin. Among other things, plugins can be used for the following:
+In order to reduce complexity, strfry's design attempts to keep policy logic out of its core relay functionality. Instead, this logic can be implemented by operators by installing policy plugins to decide which events to store. Among other things, plugins can be used for the following:
 
 * White/black-lists (particular pubkeys can/can't post events)
 * Rate-limits
@@ -8,7 +8,9 @@ In order to reduce complexity, strfry's design attempts to keep policy logic out
 
 A plugin can be implemented in any programming language that supports reading lines from stdin, decoding JSON, and printing JSON to stdout. If a plugin is installed, strfry will send the event (along with some other information like IP address) to the plugin over stdin. The plugin should then decide what to do with it and print out a JSON object containing this decision.
 
-Whenever the script's modification-time changes, or the plugin settings in `strfry.conf` change, the plugin will be reloaded upon the next write attempt.
+The plugin command can be any shell command, which lets you set environment variables, command-line switches, etc. If the plugin command contains no spaces, it is assumed to be a path to a script. In this case, whenever the script's modification-time changes, the plugin will be reloaded upon the next write attempt.
+
+If the plugin's command in `strfry.conf` (or a router config file) change, then the plugin will also be reloaded.
 
 
 ## Input messages
@@ -77,4 +79,5 @@ To install:
 
 * If applicable, you should ensure stdout is *line buffered* (for example, in perl use `$|++`).
 * If events are being rejected with `error: internal error`, then check the strfry logs. The plugin is misconfigured or failing.
+* Normally when a plugin blocks an event, it will log a message. Especially when using plugins in `stream`, `router`, etc, this might be too verbose. In order to silence these logs, return an empty string for `msg` (or no `msg` at all).
 * When returning an action of `accept`, it doesn't necessarily guarantee that the event will be accepted. The regular strfry checks are still subsequently applied, such as expiration, deletion, etc.

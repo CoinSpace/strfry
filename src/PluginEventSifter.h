@@ -15,6 +15,8 @@
 
 #include "golpe.h"
 
+#include "events.h"
+
 
 enum class PluginEventSifterResult {
     Accept,
@@ -35,7 +37,7 @@ struct PluginEventSifter {
             r = fdopen(rfd, "r");
             w = fdopen(wfd, "w");
             setlinebuf(w);
-            {
+            if (currPluginCmd.find(' ') == std::string::npos) {
                 struct stat statbuf;
                 if (stat(currPluginCmd.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", currPluginCmd);
                 lastModTime = statbuf.st_mtim;
@@ -52,7 +54,7 @@ struct PluginEventSifter {
 
     std::unique_ptr<RunningPlugin> running; 
 
-    PluginEventSifterResult acceptEvent(const std::string &pluginCmd, const tao::json::value &evJson, uint64_t receivedAt, EventSourceType sourceType, std::string_view sourceInfo, std::string &okMsg) {
+    PluginEventSifterResult acceptEvent(const std::string &pluginCmd, const tao::json::value &evJson, uint64_t receivedAtUs, EventSourceType sourceType, std::string_view sourceInfo, std::string &okMsg) {
         if (pluginCmd.size() == 0) {
             running.reset();
             return PluginEventSifterResult::Accept;
@@ -62,7 +64,7 @@ struct PluginEventSifter {
             if (running) {
                 if (pluginCmd != running->currPluginCmd) {
                     running.reset();
-                } else {
+                } else if (pluginCmd.find(' ') == std::string::npos) {
                     struct stat statbuf;
                     if (stat(pluginCmd.c_str(), &statbuf)) throw herr("couldn't stat plugin: ", pluginCmd);
                     if (statbuf.st_mtim.tv_sec != running->lastModTime.tv_sec || statbuf.st_mtim.tv_nsec != running->lastModTime.tv_nsec) {
@@ -78,7 +80,7 @@ struct PluginEventSifter {
             auto request = tao::json::value({
                 { "type", "new" },
                 { "event", evJson },
-                { "receivedAt", receivedAt / 1000000 },
+                { "receivedAt", receivedAtUs / 1'000'000 },
                 { "sourceType", eventSourceTypeToStr(sourceType) },
                 { "sourceInfo", sourceType == EventSourceType::IP4 || sourceType == EventSourceType::IP6 ? renderIP(sourceInfo) : sourceInfo },
             });
