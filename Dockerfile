@@ -47,6 +47,7 @@ RUN \
     libb2 \
     zstd \
     libressl \
+    nginx \
   && rm -rf /var/cache/apk/*
 
 COPY --from=build /build/strfry strfry
