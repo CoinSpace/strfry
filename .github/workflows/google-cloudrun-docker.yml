@@ -91,6 +91,7 @@ jobs:
           gsutil cp gs://purple_caddy/purplerelay.com/STAR.purplerelay.com.key ./STAR.purplerelay.com.key
           gsutil cp gs://purple_caddy/purplerelay.com/ssl-bundle.crt ./ssl-bundle.crt
 
+          rm -f Dockerfile
           sudo cp -r ./relay/utils/* ./
           sudo cp -r ./relay/utils/deploy_cloud_run.sh ./deploy_cloud_run.sh
           echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > application_default_credentials.json
