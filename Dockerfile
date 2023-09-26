@@ -47,7 +47,7 @@ RUN \
     libressl \
   && rm -rf /var/cache/apk/*
 
-COPY --from=build /build/strfry strfry
+COPY --from=build /build ./strfry
 
 EXPOSE 7777
 EXPOSE 80
