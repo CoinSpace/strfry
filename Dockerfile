@@ -9,6 +9,8 @@ WORKDIR /build
 
 COPY . .
 
+RUN ls -lhtra
+
 RUN \
   apk --no-cache add \
     linux-headers \
@@ -49,7 +51,16 @@ RUN \
 
 COPY --from=build /build/strfry strfry
 
+RUN ls -lhtra
+
+COPY --from=build ./build/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=build ./build/nginx/new.default.conf /etc/nginx/sites-enabled/default.conf
+
+RUN nginx
+
 EXPOSE 7777
+EXPOSE 80
+EXPOSE 443
 
 ENTRYPOINT ["/app/strfry"]
 CMD ["relay"]
