@@ -17,10 +17,7 @@ RUN \
     make \
     pkgconfig \
     libtool \
-    apt-transport-https \
     ca-certificates \
-    gnupg \
-    curl \
     perl-yaml \
     perl-template-toolkit \
     perl-app-cpanminus \
@@ -39,9 +36,6 @@ RUN \
 FROM alpine:3.18.3
 
 WORKDIR /app
-COPY --from=build /build/strfry ./strfry
-COPY ./strfry-db ./strfry-db
-COPY ./strfry.conf ./etc/strfry.conf
 
 RUN \
   apk --no-cache add \
@@ -52,24 +46,20 @@ RUN \
     zstd \
     libressl \
     nginx \
+    curl \
+    gnupg2 \
+    tini \
   && rm -rf /var/cache/apk/*
+
 ENV MNT_DIR ./strfry-db
 
-COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
-COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
+COPY --from=build /build/strfry strfry
 
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
 
-COPY --from=build ./run.sh ./run.sh
+COPY ./run.sh ./run.sh
 RUN chmod +x ./run.sh
-
-COPY --from=build ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
-RUN chmod +x ./setup_gcloud_cli.sh
-RUN ./setup_gcloud_cli.sh
-COPY ./application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
-
-COPY --from=build /build/strfry strfry
 
 EXPOSE 80
 EXPOSE 443
