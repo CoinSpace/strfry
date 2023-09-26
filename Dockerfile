@@ -61,7 +61,7 @@ RUN ls -lhtra strfry
 COPY --from=build ./build/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build ./build/nginx/new.default.conf /etc/nginx/sites-enabled/default.conf
 
-RUN nginx
+RUN rc-service nginx start
 
 EXPOSE 7777
 EXPOSE 80
