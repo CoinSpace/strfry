@@ -61,6 +61,11 @@ COPY --from=build ./build/nginx/new.default.conf ./
 COPY ./run.sh ./run.sh
 RUN chmod +x ./run.sh
 
+COPY --from=build ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
+RUN chmod +x ./setup_gcloud_cli.sh
+RUN ./setup_gcloud_cli.sh
+COPY ./application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
+
 EXPOSE 80
 EXPOSE 443
 ENTRYPOINT ["/usr/bin/tini", "--"]
