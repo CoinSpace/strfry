@@ -27,6 +27,7 @@ RUN \
     flatbuffers-dev \
     libsecp256k1-dev \
     zstd-dev \
+    nginx \
   && rm -rf /var/cache/apk/* \
   && cpanm Regexp::Grammars \
   && git submodule update --init \
@@ -34,6 +35,7 @@ RUN \
   && make -j4
 
 FROM alpine:3.18.3
+ENV MNT_DIR ./strfry-db
 
 WORKDIR /app
 
@@ -47,11 +49,43 @@ RUN \
     libressl \
   && rm -rf /var/cache/apk/*
 
-COPY --from=build /build ./strfry
+RUN \
+  apk --no-cache add \
+    nginx \
+    lsb-release \
+    fuse \
+    fuse-dev \
+    git \
+  && rm -rf /var/cache/apk/*
 
-EXPOSE 7777
+RUN \
+  wget https://go.dev/dl/go1.21.1.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+  tar -C /usr/local -xzf /tmp/go.tar.gz && \
+  rm /tmp/go.tar.gz
+
+ENV PATH=$PATH:/usr/local/go/bin
+ENV GOPATH=/go
+
+COPY --from=build /build/strfry strfry
+
+COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
+COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
+
+COPY --from=build ./build/nginx/nginx.conf ./
+COPY --from=build ./build/nginx/new.default.conf ./
+
+COPY ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
+RUN chmod +x ./setup_gcloud_cli.sh
+RUN ./setup_gcloud_cli.sh
+COPY ./application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
+
+COPY ./strfry.conf /etc/strfry.conf
+COPY ./strfry-db ./strfry-db
+
+COPY ./run.sh ./run.sh
+RUN chmod +x ./run.sh
+
 EXPOSE 80
 EXPOSE 443
 
-ENTRYPOINT ["/app/strfry"]
-CMD ["relay"]
+CMD ["./run.sh"]
