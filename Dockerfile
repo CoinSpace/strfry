@@ -80,6 +80,8 @@ RUN \
 
 ENV PATH=/google-cloud-sdk/bin:${PATH}
 
+RUN gcloud version
+
 COPY --from=build /build/strfry strfry
 
 COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
@@ -92,7 +94,7 @@ COPY --from=build ./build/nginx/new.default.conf ./
 # RUN chmod +x ./setup_gcloud_cli.sh
 # RUN ./setup_gcloud_cli.sh
 
-COPY --from=build ./application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
+COPY --from=build ./build/application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
 
 COPY ./strfry.conf /etc/strfry.conf
 COPY ./strfry-db ./strfry-db
