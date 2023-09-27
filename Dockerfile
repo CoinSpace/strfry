@@ -82,7 +82,7 @@ COPY --from=build ./application_default_credentials.json ./$HOME/.config/gcloud/
 COPY ./strfry.conf /etc/strfry.conf
 COPY ./strfry-db ./strfry-db
 
-COPY --from=build ./run.sh ./run.sh
+COPY ./run.sh ./run.sh
 RUN chmod +x ./run.sh
 
 EXPOSE 80
