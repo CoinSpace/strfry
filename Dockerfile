@@ -9,6 +9,8 @@ WORKDIR /build
 
 COPY . .
 
+RUN ls -lhtra
+
 RUN \
   apk --no-cache add \
     linux-headers \
@@ -56,6 +58,10 @@ RUN \
     fuse \
     fuse-dev \
     git \
+    python3 \
+    py3-crcmod \
+    libc6-compat \
+    openssh-client \
   && rm -rf /var/cache/apk/*
 
 RUN \
@@ -66,6 +72,14 @@ RUN \
 ENV PATH=$PATH:/usr/local/go/bin
 ENV GOPATH=/go
 
+RUN \
+  wget https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz && \
+  tar xzf google-cloud-sdk.tar.gz && \
+  ./google-cloud-sdk/install.sh --usage-reporting false --path-update false --quiet && \
+  rm ./google-cloud-sdk.tar.gz
+
+ENV PATH=/google-cloud-sdk/bin:${PATH}
+
 COPY --from=build /build/strfry strfry
 
 COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
@@ -74,9 +88,10 @@ COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
 
-COPY --from=build ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
-RUN chmod +x ./setup_gcloud_cli.sh
-RUN ./setup_gcloud_cli.sh
+# COPY --from=build ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
+# RUN chmod +x ./setup_gcloud_cli.sh
+# RUN ./setup_gcloud_cli.sh
+
 COPY --from=build ./application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
 
 COPY ./strfry.conf /etc/strfry.conf
