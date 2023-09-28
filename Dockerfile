@@ -75,6 +75,7 @@ COPY --from=build /build/strfry strfry
 
 COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
 COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
+COPY ./dump.json.zst ./dump.json.zst
 
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
