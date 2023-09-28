@@ -63,7 +63,6 @@ jobs:
           sudo apt install git -y
           git clone https://github.com/purplerelay/relay.git
           cd relay
-          # git checkout feature/devops
           git checkout feature/update-nginx
           sudo apt-get install -y gnupg software-properties-common
           wget -O- https://apt.releases.hashicorp.com/gpg | \
