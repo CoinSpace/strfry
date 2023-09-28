@@ -9,8 +9,6 @@ WORKDIR /build
 
 COPY . .
 
-RUN ls -lhtra
-
 RUN \
   apk --no-cache add \
     linux-headers \
@@ -64,22 +62,14 @@ RUN \
     openssh-client \
   && rm -rf /var/cache/apk/*
 
-RUN \
-  wget https://go.dev/dl/go1.21.1.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
-  tar -C /usr/local -xzf /tmp/go.tar.gz && \
-  rm /tmp/go.tar.gz
+COPY ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
+COPY ./setup_gcsfuse.sh ./setup_gcsfuse.sh
 
-ENV PATH=$PATH:/usr/local/go/bin
-ENV GOPATH=/go
+RUN chmod +x ./setup_gcloud_cli.sh ./setup_gcsfuse.sh
+RUN ./setup_gcloud_cli.sh
+RUN ./setup_gcsfuse.sh
 
-RUN \
-  wget https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz && \
-    tar xzf google-cloud-sdk.tar.gz -C / && \
-    /google-cloud-sdk/install.sh --usage-reporting false --path-update false --quiet
-
-ENV PATH=/google-cloud-sdk/bin:${PATH}
-
-RUN gcloud version
+RUN rm ./setup_gcloud_cli.sh ./setup_gcsfuse.sh
 
 COPY --from=build /build/strfry strfry
 
