@@ -89,10 +89,6 @@ COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
 
-# COPY --from=build ./setup_gcloud_cli.sh ./setup_gcloud_cli.sh
-# RUN chmod +x ./setup_gcloud_cli.sh
-# RUN ./setup_gcloud_cli.sh
-
 COPY --from=build ./build/application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
 
 COPY ./strfry.conf /etc/strfry.conf
