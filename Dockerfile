@@ -78,6 +78,8 @@ COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
 
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
+RUN mkdir -p /var/www/media
+COPY --from=build ./build/nginx/favicon.ico /var/www/media/favicon.ico
 
 COPY --from=build ./build/application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
 
