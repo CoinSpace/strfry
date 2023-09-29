@@ -81,7 +81,7 @@ COPY --from=build ./build/nginx/new.default.conf ./
 RUN mkdir -p /var/www/media
 COPY --from=build ./build/nginx/favicon.ico /var/www/media/favicon.ico
 
-COPY --from=build ./build/application_default_credentials.json ./$HOME/.config/gcloud/application_default_credentials.json
+COPY --from=build ./build/application_default_credentials.json $HOME/.config/gcloud/application_default_credentials.json
 
 COPY ./strfry.conf /etc/strfry.conf
 COPY ./strfry-db ./strfry-db
