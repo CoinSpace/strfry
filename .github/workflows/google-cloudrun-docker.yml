@@ -97,8 +97,6 @@ jobs:
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
 
-          gsutil cp gs://purple_caddy/purplerelay.com/dump.jsonl.zst ./dump.json.zst
-
           docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest .
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest
           sudo chmod +x deploy_cloud_run.sh
