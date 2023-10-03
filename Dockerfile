@@ -73,8 +73,8 @@ RUN rm ./setup_gcloud_cli.sh ./setup_gcsfuse.sh
 
 COPY --from=build /build/strfry strfry
 
-COPY ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
-COPY ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
+COPY --from=build ./STAR.purplerelay.com.key /etc/ssl/STAR.purplerelay.com.key
+COPY --from=build ./ssl-bundle.crt /etc/ssl/ssl-bundle.crt
 
 COPY --from=build ./build/nginx/nginx.conf ./
 COPY --from=build ./build/nginx/new.default.conf ./
