@@ -35,7 +35,7 @@ RUN \
   && make -j4
 
 FROM alpine:3.18.3
-ENV MNT_DIR ./strfry-db
+ENV MNT_DIR /app/strfry-db
 
 WORKDIR /app
 
