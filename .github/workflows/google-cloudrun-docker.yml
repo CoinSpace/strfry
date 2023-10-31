@@ -15,7 +15,8 @@ env:
   PROJECT_ID: purplerelay #update Google Cloud project id
   SERVICE: purplerelay-registry-dev #update Cloud Run service name
   REGISTRY_LOCATION: us-east1 #update Artifact Registry location
-  REGIONS: europe-north1 europe-west2 europe-west6 europe-central2 southamerica-west1 southamerica-east1 northamerica-northeast1 us-east1 us-west2 asia-east1 asia-northeast1 asia-east2 asia-northeast3 asia-south1 australia-southeast1 me-central1 me-central2 me-west1 #update Cloud Run service region
+  # REGIONS: europe-north1 europe-west2 europe-west6 europe-central2 southamerica-west1 southamerica-east1 northamerica-northeast1 us-east1 us-west2 asia-east1 asia-northeast1 asia-east2 asia-northeast3 asia-south1 australia-southeast1 me-central1 me-central2 me-west1 #update Cloud Run service region
+  REGIONS: us-east1
   TYPE: dev
 
 jobs:
