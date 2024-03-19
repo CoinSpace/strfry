@@ -84,6 +84,7 @@ COPY --from=build ./build/nginx/favicon.ico /var/www/media/favicon.ico
 COPY --from=build ./build/application_default_credentials.json /root/.config/gcloud/application_default_credentials.json
 
 COPY ./strfry.conf /etc/strfry.conf
+COPY ./strfry-router.config /etc/strfry-router.config
 COPY ./strfry-db ./strfry-db
 
 COPY ./import_db.sh ./import_db.sh
