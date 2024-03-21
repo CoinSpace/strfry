@@ -85,7 +85,10 @@ COPY --from=build ./build/application_default_credentials.json /root/.config/gcl
 
 COPY ./strfry.conf /etc/strfry.conf
 COPY ./strfry-router.config /etc/strfry-router.config
+COPY ./strfry-policy.ts /opt/strfry-policy.ts
 COPY ./strfry-db ./strfry-db
+
+RUN chmod +x /opt/strfry-policy.ts
 
 COPY ./import_db.sh ./import_db.sh
 RUN chmod +x ./import_db.sh
