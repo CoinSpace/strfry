@@ -13,7 +13,7 @@ for await (const msg of readStdin()) {
   const result = await pipeline(msg, [
     [hellthreadPolicy, { limit: 100 }],
     [antiDuplicationPolicy, { ttl: 60000, minLength: 50 }],
-    [rateLimitPolicy, { whitelist: ['127.0.0.1', '192.168.1.136', '192.168.1.1'] }],
+    [rateLimitPolicy, { whitelist: ['127.0.0.1', '192.168.1.136', '192.168.1.1', '10.0.0.0', '10.10.40.38'] }],
   ]);
 
   writeStdout(result);
