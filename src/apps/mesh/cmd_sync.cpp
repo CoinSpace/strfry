@@ -10,7 +10,7 @@
 #include "DBQuery.h"
 #include "filters.h"
 #include "events.h"
-#include "PluginWritePolicy.h"
+#include "PluginEventSifter.h"
 
 
 static const char USAGE[] =
@@ -84,7 +84,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
 
     WriterPipeline writer;
     WSConnection ws(url);
-    PluginWritePolicy writePolicy;
+    PluginEventSifter writePolicyPlugin;
 
 
     ws.reconnect = false;
@@ -126,7 +126,14 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
             if (msg.at(0) == "NEG-MSG") {
                 uint64_t origHaves = have.size(), origNeeds = need.size();
 
-                auto neMsg = ne.reconcile(from_hex(msg.at(2).get_string()), have, need);
+                std::optional<std::string> neMsg;
+
+                try {
+                    neMsg = ne.reconcile(from_hex(msg.at(2).get_string()), have, need);
+                } catch (std::exception &e) {
+                    LE << "Unable to parse negentropy message from relay: " << e.what();
+                    doExit(1);
+                }
 
                 totalHaves += have.size() - origHaves;
                 totalNeeds += need.size() - origNeeds;
@@ -134,19 +141,19 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 if (!doUp) have.clear();
                 if (!doDown) need.clear();
 
-                if (neMsg.size() == 0) {
+                if (neMsg) {
+                    ws.send(tao::json::to_string(tao::json::value::array({
+                        "NEG-MSG",
+                        "N",
+                        to_hex(*neMsg),
+                    })));
+                } else {
                     syncDone = true;
                     LI << "Set reconcile complete. Have " << totalHaves << " need " << totalNeeds;
 
                     ws.send(tao::json::to_string(tao::json::value::array({
                         "NEG-CLOSE",
                         "N",
-                    })));
-                } else {
-                    ws.send(tao::json::to_string(tao::json::value::array({
-                        "NEG-MSG",
-                        "N",
-                        to_hex(neMsg),
                     })));
                 }
             } else if (msg.at(0) == "OK") {
@@ -160,11 +167,11 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 auto &evJson = msg.at(2);
 
                 std::string okMsg;
-                auto res = writePolicy.acceptEvent(evJson, hoytech::curr_time_s(), EventSourceType::Sync, ws.remoteAddr, okMsg);
-                if (res == WritePolicyResult::Accept) {
+                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, hoytech::curr_time_us(), EventSourceType::Sync, ws.remoteAddr, okMsg);
+                if (res == PluginEventSifterResult::Accept) {
                     writer.write({ std::move(evJson), EventSourceType::Sync, url });
                 } else {
-                    LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
+                    if (okMsg.size()) LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
                 }
             } else if (msg.at(0) == "EOSE") {
                 inFlightDown = false;

@@ -9,13 +9,13 @@ name: Build and Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "feature/devops" ]
+    branches: [ "feature/update-nginx" ]
 
 env:
   PROJECT_ID: purplerelay #update Google Cloud project id
   SERVICE: purplerelay-registry-dev #update Cloud Run service name
   REGISTRY_LOCATION: us-east1 #update Artifact Registry location
-  REGIONS: us-east1 us-west1 southamerica-east1 us-central1 #update Cloud Run service region
+  REGIONS: europe-west6 southamerica-west1 southamerica-east1 us-east1 us-west2 asia-east1 asia-northeast1 asia-east2 asia-northeast3 asia-south1 australia-southeast1 me-central1 me-west1 #update Cloud Run service region
   TYPE: dev
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
         id: auth
         uses: 'google-github-actions/setup-gcloud@v0'
         with:
-          prokject_id: '${{ env.PROJECT_ID }}'
+          project_id: '${{ env.PROJECT_ID }}'
           service_account_key: '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}'
           #service_account: '215007526460-compute@developer.gserviceaccount.com'
           export_default_credentials: true
@@ -63,7 +63,7 @@ jobs:
           sudo apt install git -y
           git clone https://github.com/purplerelay/relay.git
           cd relay
-          git checkout feature/devops
+          git checkout regions-refactor
           sudo apt-get install -y gnupg software-properties-common
           wget -O- https://apt.releases.hashicorp.com/gpg | \
             gpg --dearmor | \
@@ -81,24 +81,26 @@ jobs:
           sudo chmod +x ./utils/generate_array.sh
           sudo ./utils/generate_array.sh ${{ env.REGIONS }}
           echo "regions=$(cat regions.txt)" > regions.tfvars
-          terraform plan -var-file=regions.tfvars -var='environment=${{ env.TYPE }}' -lock=false
           cd ..
       - name: Build and Push Container
         env: 
           GOOGLE_PROJECT: ${{ env.PROJECT_ID }}
         run: |-
-          rm -f Dockerfile
+          gsutil cp gs://purple_caddy/purplerelay.com/STAR.purplerelay.com.key ./STAR.purplerelay.com.key
+          gsutil cp gs://purple_caddy/purplerelay.com/ssl-bundle.crt ./ssl-bundle.crt
+
           sudo cp -r ./relay/utils/* ./
           sudo cp -r ./relay/utils/deploy_cloud_run.sh ./deploy_cloud_run.sh
           echo '${{ secrets.GCLOUD_DEFAULT_CREDENTIALS }}' > application_default_credentials.json
           export X=$(gcloud auth print-access-token)
           docker login -u oauth2accesstoken -p "$X" https://us-east1-docker.pkg.dev
           sudo gcloud auth configure-docker "${{ env.REGISTRY_LOCATION }}-docker.pkg.dev" --quiet
+
           docker build -t ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest .
           docker push ${{ env.REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/strfry:latest
           sudo chmod +x deploy_cloud_run.sh
           sudo ./deploy_cloud_run.sh "${{ env.PROJECT_ID }}" "${{ env.TYPE }}" "${{ env.SERVICE }}" "latest" "${{ env.REGIONS }}"
-          
+
       # END - Docker auth and build
 
       #- name: Deploy to Cloud Run
