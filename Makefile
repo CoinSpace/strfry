@@ -6,6 +6,7 @@ include golpe/rules.mk
 
 LDLIBS += -lsecp256k1 -lzstd
 INCS += -Iexternal/negentropy/cpp
+CXXFLAGS += -Iexternal/parallel-hashmap
 
 build/StrfryTemplates.h: $(shell find src/tmpls/ -type f -name '*.tmpl')
 	PERL5LIB=golpe/vendor/ perl golpe/external/templar/templar.pl src/tmpls/ strfrytmpl $@
