@@ -29,8 +29,9 @@ struct FilterSetBytes {
 
         std::sort(arr.begin(), arr.end());
 
-        for (const auto &item : arr) {
-            if (items.size() > 0 && item.starts_with(at(items.size() - 1))) continue; // remove duplicates and redundant prefixes
+        for (size_t i = 0; i < arr.size(); i++) {
+            const auto &item = arr[i];
+            if (i > 0 && item == arr[i - 1]) continue; // remove duplicates
             items.emplace_back(Item{ (uint16_t)buf.size(), (uint8_t)item.size(), (uint8_t)item[0] });
             buf += item;
         }
@@ -39,7 +40,7 @@ struct FilterSetBytes {
     }
 
     std::string at(size_t n) const {
-        if (n >= items.size()) throw("FilterSetBytes access out of bounds");
+        if (n >= items.size()) throw herr("FilterSetBytes access out of bounds");
         auto &item = items[n];
         return buf.substr(item.offset, item.size);
     }
@@ -72,7 +73,7 @@ struct FilterSetBytes {
         }
 
         if (first == 0) return false;
-        if (candidate.starts_with(std::string_view(buf.data() + items[first - 1].offset, items[first - 1].size))) return true;
+        if (candidate == std::string_view(buf.data() + items[first - 1].offset, items[first - 1].size)) return true;
 
         return false;
     }
@@ -92,7 +93,7 @@ struct FilterSetUint {
     }
 
     uint64_t at(size_t n) const {
-        if (n >= items.size()) throw("FilterSetBytes access out of bounds");
+        if (n >= items.size()) throw herr("FilterSetBytes access out of bounds");
         return items[n];
     }
 
@@ -120,17 +121,19 @@ struct NostrFilter {
     explicit NostrFilter(const tao::json::value &filterObj, uint64_t maxFilterLimit) {
         uint64_t numMajorFields = 0;
 
+        if (!filterObj.is_object()) throw herr("provided filter is not an object");
+
         for (const auto &[k, v] : filterObj.get_object()) {
             if (v.is_array() && v.get_array().size() == 0) {
                 neverMatch = true;
-                break;
+                continue;
             }
 
             if (k == "ids") {
-                ids.emplace(v, true, 1, 32);
+                ids.emplace(v, true, 32, 32);
                 numMajorFields++;
             } else if (k == "authors") {
-                authors.emplace(v, true, 1, 32);
+                authors.emplace(v, true, 32, 32);
                 numMajorFields++;
             } else if (k == "kinds") {
                 kinds.emplace(v);
@@ -159,7 +162,7 @@ struct NostrFilter {
             }
         }
 
-        if (tags.size() > 2) throw herr("too many tags in filter"); // O(N^2) in matching, just prohibit it
+        if (tags.size() > 3) throw herr("too many tags in filter"); // O(N^2) in matching, just prohibit it
 
         if (limit > maxFilterLimit) limit = maxFilterLimit;
 
@@ -172,40 +175,34 @@ struct NostrFilter {
         return true;
     }
 
-    bool doesMatch(const NostrIndex::Event *ev) const {
+    bool doesMatch(PackedEventView ev) const {
         if (neverMatch) return false;
 
-        if (!doesMatchTimes(ev->created_at())) return false;
+        if (!doesMatchTimes(ev.created_at())) return false;
 
-        if (ids && !ids->doesMatch(sv(ev->id()))) return false;
-        if (authors && !authors->doesMatch(sv(ev->pubkey()))) return false;
-        if (kinds && !kinds->doesMatch(ev->kind())) return false;
+        if (ids && !ids->doesMatch(ev.id())) return false;
+        if (authors && !authors->doesMatch(ev.pubkey())) return false;
+        if (kinds && !kinds->doesMatch(ev.kind())) return false;
 
         for (const auto &[tag, filt] : tags) {
             bool foundMatch = false;
 
-            for (const auto &tagPair : *(ev->tagsFixed32())) {
-                auto eventTag = tagPair->key();
-                if (eventTag == tag && filt.doesMatch(sv(tagPair->val()))) {
+            ev.foreachTag([&](char tagName, std::string_view tagVal){
+                if (tagName == tag && filt.doesMatch(tagVal)) {
                     foundMatch = true;
-                    break;
+                    return false;
                 }
-            }
-
-            if (!foundMatch) {
-                for (const auto &tagPair : *(ev->tagsGeneral())) {
-                    auto eventTag = tagPair->key();
-                    if (eventTag == tag && filt.doesMatch(sv(tagPair->val()))) {
-                        foundMatch = true;
-                        break;
-                    }
-                }
-            }
+                return true;
+            });
 
             if (!foundMatch) return false;
         }
 
         return true;
+    }
+
+    bool isFullDbQuery() {
+        return !ids && !authors && !kinds && tags.size() == 0;
     }
 };
 
@@ -240,7 +237,7 @@ struct NostrFilterGroup {
         return NostrFilterGroup(pretendReqQuery, maxFilterLimit);
     }
 
-    bool doesMatch(const NostrIndex::Event *ev) const {
+    bool doesMatch(PackedEventView ev) const {
         for (const auto &f : filters) {
             if (f.doesMatch(ev)) return true;
         }
@@ -250,5 +247,9 @@ struct NostrFilterGroup {
 
     size_t size() const {
         return filters.size();
+    }
+
+    bool isFullDbQuery() {
+        return size() == 1 && filters[0].isFullDbQuery();
     }
 };

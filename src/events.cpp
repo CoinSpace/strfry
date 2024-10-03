@@ -1,50 +1,45 @@
 #include <openssl/sha.h>
+#include <negentropy.h>
 
 #include "events.h"
+#include "jsonParseUtils.h"
 
 
-std::string nostrJsonToFlat(const tao::json::value &v) {
-    flatbuffers::FlatBufferBuilder builder; // FIXME: pre-allocate size approximately the same as orig JSON?
+std::string nostrJsonToPackedEvent(const tao::json::value &v) {
+    PackedEventTagBuilder tagBuilder;
 
     // Extract values from JSON, add strings to builder
 
-    auto id = from_hex(v.at("id").get_string(), false);
-    auto pubkey = from_hex(v.at("pubkey").get_string(), false);
-    uint64_t created_at = v.at("created_at").get_unsigned();
-    uint64_t kind = v.at("kind").get_unsigned();
+    auto id = from_hex(jsonGetString(v.at("id"), "event id field was not a string"), false);
+    auto pubkey = from_hex(jsonGetString(v.at("pubkey"), "event pubkey field was not a string"), false);
+    uint64_t created_at = jsonGetUnsigned(v.at("created_at"), "event created_at field was not an integer");
+    uint64_t kind = jsonGetUnsigned(v.at("kind"), "event kind field was not an integer");
 
     if (id.size() != 32) throw herr("unexpected id size");
     if (pubkey.size() != 32) throw herr("unexpected pubkey size");
 
-    std::vector<flatbuffers::Offset<NostrIndex::TagGeneral>> tagsGeneral;
-    std::vector<flatbuffers::Offset<NostrIndex::TagFixed32>> tagsFixed32;
+    jsonGetString(v.at("content"), "event content field was not a string");
 
     uint64_t expiration = 0;
 
     if (isReplaceableKind(kind)) {
         // Prepend virtual d-tag
-        tagsGeneral.emplace_back(NostrIndex::CreateTagGeneral(builder,
-            'd',
-            builder.CreateVector((uint8_t*)"", 0)
-        ));
+        tagBuilder.add('d', "");
     }
 
-    if (v.at("tags").get_array().size() > cfg().events__maxNumTags) throw herr("too many tags: ", v.at("tags").get_array().size());
+    if (jsonGetArray(v.at("tags"), "tags field not an array").size() > cfg().events__maxNumTags) throw herr("too many tags: ", v.at("tags").get_array().size());
     for (auto &tagArr : v.at("tags").get_array()) {
-        auto &tag = tagArr.get_array();
+        auto &tag = jsonGetArray(tagArr, "tag in tags field was not an array");
         if (tag.size() < 1) throw herr("too few fields in tag");
 
-        auto tagName = tag.at(0).get_string();
-        auto tagVal = tag.size() >= 2 ? tag.at(1).get_string() : "";
+        auto tagName = jsonGetString(tag.at(0), "tag name was not a string");
+        auto tagVal = tag.size() >= 2 ? jsonGetString(tag.at(1), "tag val was not a string") : "";
 
         if (tagName == "e" || tagName == "p") {
+            if (tagVal.size() != 64) throw herr("unexpected size for fixed-size tag: ", tagName);
             tagVal = from_hex(tagVal, false);
-            if (tagVal.size() != 32) throw herr("unexpected size for fixed-size tag");
 
-            tagsFixed32.emplace_back(NostrIndex::CreateTagFixed32(builder,
-                (uint8_t)tagName[0],
-                (NostrIndex::Fixed32Bytes*)tagVal.data()
-            ));
+            tagBuilder.add(tagName[0], tagVal);
         } else if (tagName == "expiration") {
             if (expiration == 0) {
                 expiration = parseUint64(tagVal);
@@ -54,44 +49,26 @@ std::string nostrJsonToFlat(const tao::json::value &v) {
             if (tagVal.size() > cfg().events__maxTagValSize) throw herr("tag val too large: ", tagVal.size());
 
             if (tagVal.size() <= MAX_INDEXED_TAG_VAL_SIZE) {
-                tagsGeneral.emplace_back(NostrIndex::CreateTagGeneral(builder,
-                    (uint8_t)tagName[0],
-                    builder.CreateVector((uint8_t*)tagVal.data(), tagVal.size())
-                ));
+                tagBuilder.add(tagName[0], tagVal);
             }
         }
     }
 
     if (isParamReplaceableKind(kind)) {
         // Append virtual d-tag
-        tagsGeneral.emplace_back(NostrIndex::CreateTagGeneral(builder,
-            'd',
-            builder.CreateVector((uint8_t*)"", 0)
-        ));
+        tagBuilder.add('d', "");
     }
 
     if (isEphemeralKind(kind)) {
         expiration = 1;
     }
 
-    // Create flatbuffer
+    PackedEventBuilder builder(id, pubkey, created_at, kind, expiration, tagBuilder);
 
-    auto eventPtr = NostrIndex::CreateEvent(builder,
-        (NostrIndex::Fixed32Bytes*)id.data(),
-        (NostrIndex::Fixed32Bytes*)pubkey.data(),
-        created_at,
-        kind,
-        builder.CreateVector<flatbuffers::Offset<NostrIndex::TagGeneral>>(tagsGeneral),
-        builder.CreateVector<flatbuffers::Offset<NostrIndex::TagFixed32>>(tagsFixed32),
-        expiration
-    );
-
-    builder.Finish(eventPtr);
-
-    return std::string(reinterpret_cast<char*>(builder.GetBufferPointer()), builder.GetSize());
+    return std::move(builder.buf);
 }
 
-std::string nostrHash(const tao::json::value &origJson) {
+Bytes32 nostrHash(const tao::json::value &origJson) {
     tao::json::value arr = tao::json::empty_array;
 
     arr.emplace_back(0);
@@ -107,7 +84,7 @@ std::string nostrHash(const tao::json::value &origJson) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(reinterpret_cast<unsigned char*>(encoded.data()), encoded.size(), hash);
 
-    return std::string(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
+    return Bytes32(std::string_view(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH));
 }
 
 bool verifySig(secp256k1_context* ctx, std::string_view sig, std::string_view hash, std::string_view pubkey) {
@@ -127,11 +104,11 @@ bool verifySig(secp256k1_context* ctx, std::string_view sig, std::string_view ha
     );
 }
 
-void verifyNostrEvent(secp256k1_context *secpCtx, const NostrIndex::Event *flat, const tao::json::value &origJson) {
+void verifyNostrEvent(secp256k1_context *secpCtx, PackedEventView packed, const tao::json::value &origJson) {
     auto hash = nostrHash(origJson);
-    if (hash != sv(flat->id())) throw herr("bad event id");
+    if (hash != Bytes32(packed.id())) throw herr("bad event id");
 
-    bool valid = verifySig(secpCtx, from_hex(origJson.at("sig").get_string(), false), sv(flat->id()), sv(flat->pubkey()));
+    bool valid = verifySig(secpCtx, from_hex(jsonGetString(origJson.at("sig"), "event sig was not a string"), false), packed.id(), packed.pubkey());
     if (!valid) throw herr("bad signature");
 }
 
@@ -139,28 +116,33 @@ void verifyNostrEventJsonSize(std::string_view jsonStr) {
     if (jsonStr.size() > cfg().events__maxEventSize) throw herr("event too large: ", jsonStr.size());
 }
 
-void verifyEventTimestamp(const NostrIndex::Event *flat) {
+void verifyEventTimestamp(PackedEventView packed) {
     auto now = hoytech::curr_time_s();
-    auto ts = flat->created_at();
+    auto ts = packed.created_at();
 
-    uint64_t earliest = now - (flat->expiration() == 1 ? cfg().events__rejectEphemeralEventsOlderThanSeconds : cfg().events__rejectEventsOlderThanSeconds);
+    bool isEphemeral = packed.expiration() == 1;
+
+    uint64_t earliest = now - (isEphemeral ? cfg().events__rejectEphemeralEventsOlderThanSeconds : cfg().events__rejectEventsOlderThanSeconds);
     uint64_t latest = now + cfg().events__rejectEventsNewerThanSeconds;
 
     // overflows
     if (earliest > now) earliest = 0;
     if (latest < now) latest = MAX_U64 - 1;
 
-    if (ts < earliest) throw herr("created_at too early");
+    if (ts < earliest) throw herr(isEphemeral ? "ephemeral event expired" : "created_at too early");
     if (ts > latest) throw herr("created_at too late");
 
-    if (flat->expiration() > 1 && flat->expiration() <= now) throw herr("event expired");
+    if (packed.expiration() > 1 && packed.expiration() <= now) throw herr("event expired");
 }
 
-void parseAndVerifyEvent(const tao::json::value &origJson, secp256k1_context *secpCtx, bool verifyMsg, bool verifyTime, std::string &flatStr, std::string &jsonStr) {
-    flatStr = nostrJsonToFlat(origJson);
-    auto *flat = flatbuffers::GetRoot<NostrIndex::Event>(flatStr.data());
-    if (verifyTime) verifyEventTimestamp(flat);
-    if (verifyMsg) verifyNostrEvent(secpCtx, flat, origJson);
+
+void parseAndVerifyEvent(const tao::json::value &origJson, secp256k1_context *secpCtx, bool verifyMsg, bool verifyTime, std::string &packedStr, std::string &jsonStr) {
+    if (!origJson.is_object()) throw herr("event is not an object");
+
+    packedStr = nostrJsonToPackedEvent(origJson);
+    PackedEventView packed(packedStr);
+    if (verifyTime) verifyEventTimestamp(packed);
+    if (verifyMsg) verifyNostrEvent(secpCtx, packed, origJson);
 
     // Build new object to remove unknown top-level fields from json
     jsonStr = tao::json::to_string(tao::json::value({
@@ -231,7 +213,7 @@ std::string_view decodeEventPayload(lmdb::txn &txn, Decompressor &decomp, std::s
         if (outCompressedSize) *outCompressedSize = raw.size();
         return buf;
     } else {
-        throw("Unexpected first byte in EventPayload");
+        throw herr("Unexpected first byte in EventPayload");
     }
 }
 
@@ -253,8 +235,9 @@ std::string_view getEventJson(lmdb::txn &txn, Decompressor &decomp, uint64_t lev
 
 
 
+// Do not use externally: does not handle negentropy trees
 
-bool deleteEvent(lmdb::txn &txn, uint64_t levId) {
+bool deleteEventBasic(lmdb::txn &txn, uint64_t levId) {
     bool deleted = env.dbi_EventPayload.del(txn, lmdb::to_sv<uint64_t>(levId));
     env.delete_Event(txn, levId);
     return deleted;
@@ -262,7 +245,7 @@ bool deleteEvent(lmdb::txn &txn, uint64_t levId) {
 
 
 
-void writeEvents(lmdb::txn &txn, std::vector<EventToWrite> &evs, uint64_t logLevel) {
+void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vector<EventToWrite> &evs, uint64_t logLevel) {
     std::sort(evs.begin(), evs.end(), [](auto &a, auto &b) {
         auto aC = a.createdAt();
         auto bC = b.createdAt();
@@ -273,88 +256,99 @@ void writeEvents(lmdb::txn &txn, std::vector<EventToWrite> &evs, uint64_t logLev
     std::vector<uint64_t> levIdsToDelete;
     std::string tmpBuf;
 
-    for (size_t i = 0; i < evs.size(); i++) {
-        auto &ev = evs[i];
+    neFilterCache.ctx(txn, [&](const std::function<void(const PackedEventView &, bool)> &updateNegentropy){
+        for (size_t i = 0; i < evs.size(); i++) {
+            auto &ev = evs[i];
 
-        const NostrIndex::Event *flat = flatbuffers::GetRoot<NostrIndex::Event>(ev.flatStr.data());
+            PackedEventView packed(ev.packedStr);
 
-        if (lookupEventById(txn, sv(flat->id())) || (i != 0 && ev.id() == evs[i-1].id())) {
-            ev.status = EventWriteStatus::Duplicate;
-            continue;
-        }
+            if (lookupEventById(txn, packed.id()) || (i != 0 && ev.id() == evs[i-1].id())) {
+                ev.status = EventWriteStatus::Duplicate;
+                continue;
+            }
 
-        if (env.lookup_Event__deletion(txn, std::string(sv(flat->id())) + std::string(sv(flat->pubkey())))) {
-            ev.status = EventWriteStatus::Deleted;
-            continue;
-        }
+            if (env.lookup_Event__deletion(txn, std::string(packed.id()) + std::string(packed.pubkey()))) {
+                ev.status = EventWriteStatus::Deleted;
+                continue;
+            }
 
-        {
-            std::optional<std::string> replace;
+            {
+                std::optional<std::string> replace;
 
-            if (isReplaceableKind(flat->kind()) || isParamReplaceableKind(flat->kind())) {
-                for (const auto &tagPair : *(flat->tagsGeneral())) {
-                    auto tagName = (char)tagPair->key();
-                    if (tagName != 'd') continue;
-                    replace = std::string(sv(tagPair->val()));
-                    break;
+                if (isReplaceableKind(packed.kind()) || isParamReplaceableKind(packed.kind())) {
+                    packed.foreachTag([&](char tagName, std::string_view tagVal){
+                        if (tagName != 'd') return true;
+                        replace = std::string(tagVal);
+                        return false;
+                    });
+                }
+
+                if (replace) {
+                    auto searchStr = std::string(packed.pubkey()) + *replace;
+                    auto searchKey = makeKey_StringUint64(searchStr, packed.kind());
+
+                    env.generic_foreachFull(txn, env.dbi_Event__replace, searchKey, lmdb::to_sv<uint64_t>(MAX_U64), [&](auto k, auto v) {
+                        ParsedKey_StringUint64 parsedKey(k);
+                        if (parsedKey.s == searchStr && parsedKey.n == packed.kind()) {
+                            auto otherEv = lookupEventByLevId(txn, lmdb::from_sv<uint64_t>(v));
+
+                            auto thisTimestamp = packed.created_at();
+                            auto otherPacked = PackedEventView(otherEv.buf);
+                            auto otherTimestamp = otherPacked.created_at();
+
+                            if (otherTimestamp < thisTimestamp ||
+                                (otherTimestamp == thisTimestamp && packed.id() < otherPacked.id())) {
+                                if (logLevel >= 1) LI << "Deleting event (d-tag). id=" << to_hex(otherPacked.id());
+                                levIdsToDelete.push_back(otherEv.primaryKeyId);
+                            } else {
+                                ev.status = EventWriteStatus::Replaced;
+                            }
+                        }
+
+                        return false;
+                    }, true);
                 }
             }
 
-            if (replace) {
-                auto searchStr = std::string(sv(flat->pubkey())) + *replace;
-                auto searchKey = makeKey_StringUint64(searchStr, flat->kind());
-
-                env.generic_foreachFull(txn, env.dbi_Event__replace, searchKey, lmdb::to_sv<uint64_t>(MAX_U64), [&](auto k, auto v) {
-                    ParsedKey_StringUint64 parsedKey(k);
-                    if (parsedKey.s == searchStr && parsedKey.n == flat->kind()) {
-                        auto otherEv = lookupEventByLevId(txn, lmdb::from_sv<uint64_t>(v));
-
-                        auto thisTimestamp = flat->created_at();
-                        auto otherTimestamp = otherEv.flat_nested()->created_at();
-
-                        if (otherTimestamp < thisTimestamp ||
-                            (otherTimestamp == thisTimestamp && sv(flat->id()) < sv(otherEv.flat_nested()->id()))) {
-                            if (logLevel >= 1) LI << "Deleting event (d-tag). id=" << to_hex(sv(otherEv.flat_nested()->id()));
-                            levIdsToDelete.push_back(otherEv.primaryKeyId);
-                        } else {
-                            ev.status = EventWriteStatus::Replaced;
+            if (packed.kind() == 5) {
+                // Deletion event, delete all referenced events
+                packed.foreachTag([&](char tagName, std::string_view tagVal){
+                    if (tagName == 'e') {
+                        auto otherEv = lookupEventById(txn, tagVal);
+                        if (otherEv && PackedEventView(otherEv->buf).pubkey() == packed.pubkey()) {
+                            if (logLevel >= 1) LI << "Deleting event (kind 5). id=" << to_hex(tagVal);
+                            levIdsToDelete.push_back(otherEv->primaryKeyId);
                         }
                     }
-
-                    return false;
-                }, true);
+                    return true;
+                });
             }
-        }
 
-        if (flat->kind() == 5) {
-            // Deletion event, delete all referenced events
-            for (const auto &tagPair : *(flat->tagsFixed32())) {
-                if (tagPair->key() == 'e') {
-                    auto otherEv = lookupEventById(txn, sv(tagPair->val()));
-                    if (otherEv && sv(otherEv->flat_nested()->pubkey()) == sv(flat->pubkey())) {
-                        if (logLevel >= 1) LI << "Deleting event (kind 5). id=" << to_hex(sv(tagPair->val()));
-                        levIdsToDelete.push_back(otherEv->primaryKeyId);
-                    }
+            if (ev.status == EventWriteStatus::Pending) {
+                ev.levId = env.insert_Event(txn, ev.packedStr);
+
+                tmpBuf.clear();
+                tmpBuf += '\x00';
+                tmpBuf += ev.jsonStr;
+                env.dbi_EventPayload.put(txn, lmdb::to_sv<uint64_t>(ev.levId), tmpBuf);
+
+                updateNegentropy(PackedEventView(ev.packedStr), true);
+
+                ev.status = EventWriteStatus::Written;
+
+                // Deletions happen after event was written to ensure levIds are not reused
+
+                for (auto levId : levIdsToDelete) {
+                    auto evToDel = env.lookup_Event(txn, levId);
+                    if (!evToDel) continue; // already deleted
+                    updateNegentropy(PackedEventView(evToDel->buf), false);
+                    deleteEventBasic(txn, levId);
                 }
+
+                levIdsToDelete.clear();
             }
+
+            if (levIdsToDelete.size()) throw herr("unprocessed deletion");
         }
-
-        if (ev.status == EventWriteStatus::Pending) {
-            ev.levId = env.insert_Event(txn, ev.receivedAt, ev.flatStr, (uint64_t)ev.sourceType, ev.sourceInfo);
-
-            tmpBuf.clear();
-            tmpBuf += '\x00';
-            tmpBuf += ev.jsonStr;
-            env.dbi_EventPayload.put(txn, lmdb::to_sv<uint64_t>(ev.levId), tmpBuf);
-
-            ev.status = EventWriteStatus::Written;
-
-            // Deletions happen after event was written to ensure levIds are not reused
-
-            for (auto levId : levIdsToDelete) deleteEvent(txn, levId);
-            levIdsToDelete.clear();
-        }
-
-        if (levIdsToDelete.size()) throw herr("unprocessed deletion");
-    }
+    });
 }

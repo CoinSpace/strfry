@@ -4,6 +4,7 @@
 
 #include "golpe.h"
 
+#include "Bytes32.h"
 #include "Subscription.h"
 #include "filters.h"
 
@@ -27,8 +28,8 @@ struct ActiveMonitors : NonCopyable {
     };
 
     using MonitorSet = flat_hash_map<NostrFilter*, MonitorItem>;
-    btree_map<std::string, MonitorSet> allIds;
-    btree_map<std::string, MonitorSet> allAuthors;
+    btree_map<Bytes32, MonitorSet> allIds;
+    btree_map<Bytes32, MonitorSet> allAuthors;
     btree_map<std::string, MonitorSet> allTags;
     btree_map<uint64_t, MonitorSet> allKinds;
     MonitorSet allOthers;
@@ -84,7 +85,7 @@ struct ActiveMonitors : NonCopyable {
         conns.erase(connId);
     }
 
-    void process(lmdb::txn &txn, defaultDb::environment::View_Event &ev, std::function<void(RecipientList &&, uint64_t)> cb) {
+    void process(lmdb::txn &txn, defaultDb::environment::View_Event &ev, const std::function<void(RecipientList &&, uint64_t)> &cb) {
         RecipientList recipients;
 
         auto processMonitorSet = [&](MonitorSet &ms){
@@ -92,7 +93,7 @@ struct ActiveMonitors : NonCopyable {
                 if (item.latestEventId >= ev.primaryKeyId || item.mon->sub.latestEventId >= ev.primaryKeyId) continue;
                 item.latestEventId = ev.primaryKeyId;
 
-                if (f->doesMatch(ev.flat_nested())) {
+                if (f->doesMatch(PackedEventView(ev.buf))) {
                     recipients.emplace_back(item.mon->sub.connId, item.mon->sub.subId);
                     item.mon->sub.latestEventId = ev.primaryKeyId;
                     continue;
@@ -100,18 +101,7 @@ struct ActiveMonitors : NonCopyable {
             }
         };
 
-        auto processMonitorsPrefix = [&](btree_map<std::string, MonitorSet> &m, const std::string &key, std::function<bool(const std::string&)> matches){
-            auto it = m.lower_bound(key.substr(0, 1));
-
-            if (it == m.end()) return;
-
-            while (it != m.end() && it->first[0] == key[0]) {
-                if (matches(it->first)) processMonitorSet(it->second);
-                it = std::next(it);
-            }
-        };
-
-        auto processMonitorsExact = [&]<typename T>(btree_map<T, MonitorSet> &m, const T &key, std::function<bool(const T &)> matches){
+        auto processMonitorsExact = [&]<typename T>(btree_map<T, MonitorSet> &m, const T &key, const std::function<bool(const T &)> &matches){
             auto it = m.upper_bound(key);
 
             if (it == m.begin()) return;
@@ -124,39 +114,33 @@ struct ActiveMonitors : NonCopyable {
             }
         };
 
-        auto *flat = ev.flat_nested();
+        auto packed = PackedEventView(ev.buf);
 
         {
-            auto id = std::string(sv(flat->id()));
-            processMonitorsPrefix(allIds, id, static_cast<std::function<bool(const std::string&)>>([&](const std::string &val){
-                return id.starts_with(val);
+            Bytes32 id(packed.id());
+            processMonitorsExact(allIds, id, static_cast<const std::function<bool(const Bytes32&)> &>([&](const Bytes32 &val){
+                return id == val;
             }));
         }
 
         {
-            auto pubkey = std::string(sv(flat->pubkey()));
-            processMonitorsPrefix(allAuthors, pubkey, static_cast<std::function<bool(const std::string&)>>([&](const std::string &val){
-                return pubkey.starts_with(val);
+            Bytes32 pubkey(packed.pubkey());
+            processMonitorsExact(allAuthors, pubkey, static_cast<const std::function<bool(const Bytes32&)> &>([&](const Bytes32 &val){
+                return pubkey == val;
             }));
         }
 
-        for (const auto &tag : *flat->tagsFixed32()) {
-            auto &tagSpec = getTagSpec(tag->key(), sv(tag->val()));
-            processMonitorsExact(allTags, tagSpec, static_cast<std::function<bool(const std::string&)>>([&](const std::string &val){
+        packed.foreachTag([&](char tagName, std::string_view tagVal){
+            auto &tagSpec = getTagSpec(tagName, tagVal);
+            processMonitorsExact(allTags, tagSpec, static_cast<const std::function<bool(const std::string&)> &>([&](const std::string &val){
                 return tagSpec == val;
             }));
-        }
-
-        for (const auto &tag : *flat->tagsGeneral()) {
-            auto &tagSpec = getTagSpec(tag->key(), sv(tag->val()));
-            processMonitorsExact(allTags, tagSpec, static_cast<std::function<bool(const std::string&)>>([&](const std::string &val){
-                return tagSpec == val;
-            }));
-        }
+            return true;
+        });
 
         {
-            auto kind = flat->kind();
-            processMonitorsExact(allKinds, kind, static_cast<std::function<bool(const uint64_t&)>>([&](const uint64_t &val){
+            auto kind = packed.kind();
+            processMonitorsExact(allKinds, kind, static_cast<const std::function<bool(const uint64_t&)> &>([&](const uint64_t &val){
                 return kind == val;
             }));
         }
@@ -184,12 +168,12 @@ struct ActiveMonitors : NonCopyable {
         for (auto &f : m->sub.filterGroup.filters) {
             if (f.ids) {
                 for (size_t i = 0; i < f.ids->size(); i++) {
-                    auto res = allIds.try_emplace(f.ids->at(i));
+                    auto res = allIds.try_emplace(Bytes32(f.ids->at(i)));
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
                 }
             } else if (f.authors) {
                 for (size_t i = 0; i < f.authors->size(); i++) {
-                    auto res = allAuthors.try_emplace(f.authors->at(i));
+                    auto res = allAuthors.try_emplace(Bytes32(f.authors->at(i)));
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
                 }
             } else if (f.tags.size()) {
@@ -215,15 +199,17 @@ struct ActiveMonitors : NonCopyable {
         for (auto &f : m->sub.filterGroup.filters) {
             if (f.ids) {
                 for (size_t i = 0; i < f.ids->size(); i++) {
-                    auto &monSet = allIds.at(f.ids->at(i));
+                    Bytes32 id(f.ids->at(i));
+                    auto &monSet = allIds.at(id);
                     monSet.erase(&f);
-                    if (monSet.empty()) allIds.erase(f.ids->at(i));
+                    if (monSet.empty()) allIds.erase(id);
                 }
             } else if (f.authors) {
                 for (size_t i = 0; i < f.authors->size(); i++) {
-                    auto &monSet = allAuthors.at(f.authors->at(i));
+                    Bytes32 author(f.authors->at(i));
+                    auto &monSet = allAuthors.at(author);
                     monSet.erase(&f);
-                    if (monSet.empty()) allAuthors.erase(f.authors->at(i));
+                    if (monSet.empty()) allAuthors.erase(author);
                 }
             } else if (f.tags.size()) {
                 for (const auto &[tagName, filterSet] : f.tags) {
@@ -236,9 +222,10 @@ struct ActiveMonitors : NonCopyable {
                 }
             } else if (f.kinds) {
                 for (size_t i = 0; i < f.kinds->size(); i++) {
-                    auto &monSet = allKinds.at(f.kinds->at(i));
+                    uint64_t kind = f.kinds->at(i);
+                    auto &monSet = allKinds.at(kind);
                     monSet.erase(&f);
-                    if (monSet.empty()) allKinds.erase(f.kinds->at(i));
+                    if (monSet.empty()) allKinds.erase(kind);
                 }
             } else {
                 allOthers.erase(&f);

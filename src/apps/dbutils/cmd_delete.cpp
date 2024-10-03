@@ -68,10 +68,9 @@ void cmd_delete(const std::vector<std::string> &subArgs) {
 
     {
         auto txn = env.txn_rw();
+        NegentropyFilterCache neFilterCache;
 
-        for (auto levId : levIds) {
-            deleteEvent(txn, levId);
-        }
+        deleteEvents(txn, neFilterCache, levIds);
 
         txn.commit();
     }

@@ -16,6 +16,7 @@
 #include "ThreadPool.h"
 #include "events.h"
 #include "filters.h"
+#include "jsonParseUtils.h"
 #include "Decompressor.h"
 
 
@@ -65,8 +66,7 @@ struct MsgWriter : NonCopyable {
     struct AddEvent {
         uint64_t connId;
         std::string ipAddr;
-        uint64_t receivedAt;
-        std::string flatStr;
+        std::string packedStr;
         std::string jsonStr;
     };
 
@@ -123,7 +123,7 @@ struct MsgReqMonitor : NonCopyable {
 struct MsgNegentropy : NonCopyable {
     struct NegOpen {
         Subscription sub;
-        uint64_t idSize;
+        std::string filterStr;
         std::string negPayload;
     };
 

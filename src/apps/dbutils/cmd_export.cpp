@@ -9,7 +9,7 @@
 static const char USAGE[] =
 R"(
     Usage:
-      export [--since=<since>] [--until=<until>] [--reverse]
+      export [--since=<since>] [--until=<until>] [--reverse] [--fried]
 )";
 
 
@@ -20,6 +20,7 @@ void cmd_export(const std::vector<std::string> &subArgs) {
     if (args["--since"]) since = args["--since"].asLong();
     if (args["--until"]) until = args["--until"].asLong();
     bool reverse = args["--reverse"].asBool();
+    bool fried = args["--fried"].asBool();
 
     Decompressor decomp;
 
@@ -29,10 +30,17 @@ void cmd_export(const std::vector<std::string> &subArgs) {
 
     if (dbVersion == 0) throw herr("migration from DB version 0 not supported by this version of strfry");
 
+    if (fried) {
+        if (std::endian::native != std::endian::little) throw herr("--fried currently only supported on little-endian CPUs"); // FIXME
+        if (dbVersion < 3) throw herr("can't export old DB version with --fried: please downgrade to 0.9.7");
+    }
+
     uint64_t start = reverse ? until : since;
     uint64_t startDup = reverse ? MAX_U64 : 0;
 
     exitOnSigPipe();
+
+    std::string o;
 
     env.generic_foreachFull(txn, env.dbi_Event__created_at, lmdb::to_sv<uint64_t>(start), lmdb::to_sv<uint64_t>(startDup), [&](auto k, auto v) {
         if (reverse) {
@@ -42,8 +50,23 @@ void cmd_export(const std::vector<std::string> &subArgs) {
         }
 
         auto levId = lmdb::from_sv<uint64_t>(v);
+        std::string_view json = getEventJson(txn, decomp, levId);
 
-        std::cout << getEventJson(txn, decomp, levId) << "\n";
+        if (fried) {
+            auto ev = lookupEventByLevId(txn, levId);
+
+            o.clear();
+            o.reserve(json.size() + ev.buf.size() * 2 + 100);
+            o = json;
+            o.resize(o.size() - 1);
+            o += ",\"fried\":\"";
+            o += to_hex(ev.buf);
+            o += "\"}\n";
+
+            std::cout << o;
+        } else {
+            std::cout << json << "\n";
+        }
 
         return true;
     }, reverse);

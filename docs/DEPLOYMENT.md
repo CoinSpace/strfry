@@ -47,18 +47,38 @@ While you wait for your server to provision, go to your DNS provider and point a
         # Build it
         git submodule update --init
         make setup-golpe
-        make -j1
+        make -j4
 
         # Go get coffee, this takes a few minutes on a single vCPU
 
         # Install strfry
         sudo cp strfry /usr/local/bin
 
+        # Install web hosting dependencies
+        sudo apt install nginx certbot python3-certbot-nginx
+
         # Remove the default nginx file
         sudo rm -rf /etc/nginx/sites-available/default
 
         # Provide the following settings file
         sudo vim /etc/nginx/sites-available/default
+
+        sudo service nginx restart
+
+Note, at this point your nginx will just try to pass all connections to a nonexistent strfry endpoint, get frustrated, and refuse the connection.
+
+### Configure Strfry
+
+- Create user 
+
+        sudo useradd -M -s /usr/sbin/nologin strfry
+
+- Create data directory
+
+        sudo mkdir /var/lib/strfry
+        sudo chown strfry:strfry /var/lib/strfry
+        sudo chmod 755 /var/lib/strfry 
+
 
 ### Sample NGINX Starter Config
 

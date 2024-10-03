@@ -16,7 +16,7 @@ We're going to call the two sides engaged in the sync the client and the relay (
 * (4) Relay calls `reconcile()` on its `Negentropy` object, and returns the results as a `NEG-MSG` answer to the client.
 * (5) Client calls `reconcile()` on its `Negentropy` object using the value sent by the relay.
   * If the empty string is returned, the sync is complete.
-  * This call will return `have` and `need` arrays, which correspond to nostr IDs (or ID prefixes, if `idSize < 32`) that should be uploaded and downloaded, respectively.
+  * This call will return `have` and `need` arrays, which correspond to nostr IDs that should be uploaded and downloaded, respectively.
   * Otherwise, the result is sent back to the relay in another `NEG-MSG`. Goto step 4.
 
 ## Nostr Messages
@@ -27,15 +27,13 @@ We're going to call the two sides engaged in the sync the client and the relay (
 [
     "NEG-OPEN",
     <subscription ID string>,
-    <nostr filter or event ID>,
-    <idSize>,
+    <nostr filter>,
     <initialMessage, lowercase hex-encoded>
 ]
 ```
 
 * The subscription ID is used by each side to identify which query a message refers to. It only needs to be long enough to distinguish it from any other concurrent NEG requests on this websocket connection (an integer that increments once per `NEG-OPEN` is fine). If a `NEG-OPEN` is issued for a currently open subscription ID, the existing subscription is first closed.
-* The nostr filter is as described in [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md), or is an event ID whose `content` contains the JSON-encoded filter/array of filters.
-* `idSize` indicates the truncation byte size for IDs. It should be an integer between 8 and 32, inclusive. Smaller values will reduce the amount of bandwidth used, but increase the chance of a collision. 16 is a good default.
+* The nostr filter is as described in [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md).
 * `initialMessage` is the string returned by `initiate()`, hex-encoded.
 
 ### Error message (relay to client):
@@ -57,10 +55,6 @@ Current reason codes are:
   * The maximum number of records that can be processed can optionally be returned as the 4th element in the response
 * `CLOSED`
   * Because the `NEG-OPEN` queries are stateful, relays may choose to time-out inactive queries to recover memory resources
-* `FILTER_NOT_FOUND`
-  * If an event ID is used as the filter, this error will be returned if the relay does not have this event. The client should retry with the full filter, or upload the event to the relay.
-* `FILTER_INVALID`
-  * The event's `content` was not valid JSON, or the filter was invalid for some other reason.
 
 After a `NEG-ERR` is issued, the subscription is considered to be closed.
 

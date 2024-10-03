@@ -5,6 +5,7 @@
 
 #include "golpe.h"
 
+#include "Bytes32.h"
 #include "WriterPipeline.h"
 #include "Subscription.h"
 #include "WSConnection.h"
@@ -31,7 +32,7 @@ void cmd_stream(const std::vector<std::string> &subArgs) {
 
     if (dir != "up" && dir != "down" && dir != "both") throw herr("invalid direction: ", dir, ". Should be one of up/down/both");
 
-    flat_hash_set<std::string> downloadedIds;
+    flat_hash_set<Bytes32> downloadedIds;
     WriterPipeline writer;
     WSConnection ws(url);
     Decompressor decomp;
@@ -67,10 +68,10 @@ void cmd_stream(const std::vector<std::string> &subArgs) {
                     auto &evJson = origJson.at(2);
 
                     std::string okMsg;
-                    auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, hoytech::curr_time_us(), EventSourceType::Stream, ws.remoteAddr, okMsg);
+                    auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, EventSourceType::Stream, ws.remoteAddr, okMsg);
                     if (res == PluginEventSifterResult::Accept) {
                         downloadedIds.emplace(from_hex(evJson.at("id").get_string()));
-                        writer.write({ std::move(evJson), EventSourceType::Stream, url });
+                        writer.write({ std::move(evJson), });
                     } else {
                         if (okMsg.size()) LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
                     }
@@ -101,7 +102,7 @@ void cmd_stream(const std::vector<std::string> &subArgs) {
         env.foreach_Event(txn, [&](auto &ev){
             currEventId = ev.primaryKeyId;
 
-            auto id = std::string(sv(ev.flat_nested()->id()));
+            Bytes32 id(PackedEventView(ev.buf).id());
             if (downloadedIds.find(id) != downloadedIds.end()) {
                 downloadedIds.erase(id);
                 return true;

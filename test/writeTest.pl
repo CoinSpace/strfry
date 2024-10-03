@@ -276,7 +276,7 @@ sub addEvent {
 
     my $eventJson = `cat test-eventXYZ.json`;
 
-    system(qq{ <test-eventXYZ.json ./strfry --config test/strfry.conf import 2>/dev/null });
+    system(qq{ <test-eventXYZ.json ./strfry --config test/cfgs/writeTest.conf import 2>/dev/null });
 
     system(qq{ rm test-eventXYZ.json });
 

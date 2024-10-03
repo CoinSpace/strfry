@@ -183,9 +183,9 @@ struct Router {
 
             std::string okMsg;
 
-            auto res = pluginDown.acceptEvent(pluginDownCmd, evJson, hoytech::curr_time_us(), EventSourceType::Stream, url, okMsg);
+            auto res = pluginDown.acceptEvent(pluginDownCmd, evJson, EventSourceType::Stream, url, okMsg);
             if (res == PluginEventSifterResult::Accept) {
-                router->writer.write({ std::move(evJson), EventSourceType::Stream, url });
+                router->writer.write({ std::move(evJson), });
             } else {
                 if (okMsg.size()) LI << groupName << " / " << url << " : pluginDown blocked event " << evJson.at("id").get_string() << ": " << okMsg;
             }
@@ -193,7 +193,7 @@ struct Router {
 
         void outgoingEvent(lmdb::txn &txn, defaultDb::environment::View_Event &ev, std::string &responseStr, tao::json::value &evJson) {
             if (dir == "down") return;
-            if (!filterCompiled.doesMatch(ev.flat_nested())) return;
+            if (!filterCompiled.doesMatch(PackedEventView(ev.buf))) return;
 
             if (responseStr.size() == 0) {
                 auto evStr = getEventJson(txn, router->decomp, ev.primaryKeyId);
@@ -206,7 +206,7 @@ struct Router {
 
             std::string okMsg;
 
-            auto res = pluginUp.acceptEvent(pluginUpCmd, evJson, ev.receivedAt(), (EventSourceType)ev.sourceType(), ev.sourceInfo(), okMsg);
+            auto res = pluginUp.acceptEvent(pluginUpCmd, evJson, EventSourceType::Stored, "", okMsg);
             if (res == PluginEventSifterResult::Accept) {
                 for (auto &[url, c] : conns) {
                     if (c.ws) c.ws->send(responseStr.data(), responseStr.size(), uWS::OpCode::TEXT, nullptr, nullptr, true);
@@ -391,7 +391,7 @@ struct Router {
         hubTrigger->setData(&asyncCb);
 
         hubTrigger->start([](uS::Async *a){
-            auto *r = static_cast<std::function<void()> *>(a->data);
+            auto *r = static_cast<std::function<void()> *>(a->getData());
             (*r)();
         });
 

@@ -1,4 +1,8 @@
 #include <arpa/inet.h>
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#include <netinet/in.h>
+#endif
 #include <stdio.h>
 #include <signal.h>
 
@@ -105,11 +109,6 @@ uint64_t getDBVersion(lmdb::txn &txn) {
     return dbVersion;
 }
 
-
-std::string padBytes(std::string_view str, size_t n, char padChar) {
-    if (str.size() > n) throw herr("unable to pad, string longer than expected");
-    return std::string(str) + std::string(n - str.size(), padChar);
-}
 
 void exitOnSigPipe() {
     struct sigaction act;

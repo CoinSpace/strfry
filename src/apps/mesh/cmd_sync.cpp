@@ -1,9 +1,13 @@
 #include <docopt.h>
 #include <tao/json.hpp>
-#include <Negentropy.h>
+#include <negentropy.h>
+#include <negentropy/storage/Vector.h>
+#include <negentropy/storage/BTreeLMDB.h>
+#include <negentropy/storage/SubRange.h>
 
 #include "golpe.h"
 
+#include "Bytes32.h"
 #include "WriterPipeline.h"
 #include "Subscription.h"
 #include "WSConnection.h"
@@ -40,45 +44,64 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
     uint64_t frameSizeLimit = 60'000; // default frame limit is 128k. Halve that (hex encoding) and subtract a bit (JSON msg overhead)
     if (args["--frame-size-limit"]) frameSizeLimit = args["--frame-size-limit"].asLong();
 
-    const uint64_t idSize = 16;
     const bool doUp = dir == "both" || dir == "up";
     const bool doDown = dir == "both" || dir == "down";
 
 
-    tao::json::value filter = tao::json::from_string(filterStr);
+    tao::json::value filterJson = tao::json::from_string(filterStr);
+    auto filterCompiled = NostrFilterGroup::unwrapped(filterJson);
 
+    std::optional<uint64_t> treeId;
+    negentropy::storage::Vector storageVector;
 
-    Negentropy ne(idSize, frameSizeLimit);
 
     {
-        DBQuery query(filter);
-        Decompressor decomp;
-
         auto txn = env.txn_ro();
 
-        uint64_t numEvents = 0;
-        std::vector<uint64_t> levIds;
-
-        while (1) {
-            bool complete = query.process(txn, [&](const auto &sub, uint64_t levId){
-                levIds.push_back(levId);
-                numEvents++;
-            });
-
-            if (complete) break;
+        auto filterJsonNoTimes = filterJson;
+        if (filterJsonNoTimes.is_object()) {
+            filterJsonNoTimes.get_object().erase("since");
+            filterJsonNoTimes.get_object().erase("until");
         }
+        auto filterJsonNoTimesStr = tao::json::to_string(filterJsonNoTimes);
 
-        std::sort(levIds.begin(), levIds.end());
+        env.foreach_NegentropyFilter(txn, [&](auto &f){
+            if (f.filter() == filterJsonNoTimesStr) {
+                treeId = f.primaryKeyId;
+                return false;
+            }
+            return true;
+        });
 
-        for (auto levId : levIds) {
-            auto ev = lookupEventByLevId(txn, levId);
-            ne.addItem(ev.flat_nested()->created_at(), sv(ev.flat_nested()->id()).substr(0, ne.idSize));
+        if (!treeId) {
+            DBQuery query(filterJson);
+            Decompressor decomp;
+
+            uint64_t numEvents = 0;
+            std::vector<uint64_t> levIds;
+
+            while (1) {
+                bool complete = query.process(txn, [&](const auto &sub, uint64_t levId){
+                    levIds.push_back(levId);
+                    numEvents++;
+                });
+
+                if (complete) break;
+            }
+
+            std::sort(levIds.begin(), levIds.end());
+
+            for (auto levId : levIds) {
+                auto ev = lookupEventByLevId(txn, levId);
+                PackedEventView packed(ev.buf);
+                storageVector.insert(packed.created_at(), packed.id());
+            }
+
+            LI << "Filter matches " << numEvents << " events";
+
+            storageVector.seal();
         }
-
-        LI << "Filter matches " << numEvents << " events";
     }
-
-    ne.seal();
 
 
 
@@ -90,13 +113,27 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
     ws.reconnect = false;
 
     ws.onConnect = [&]{
-        auto neMsg = to_hex(ne.initiate());
+        auto txn = env.txn_ro();
+        std::string neMsg;
+
+        if (treeId) {
+            negentropy::storage::BTreeLMDB storageBtree(txn, negentropyDbi, *treeId);
+
+            const auto &f = filterCompiled.filters.at(0);
+            negentropy::storage::SubRange subStorage(storageBtree, negentropy::Bound(f.since), negentropy::Bound(f.until == MAX_U64 ? MAX_U64 : f.until + 1));
+
+            Negentropy ne(subStorage, frameSizeLimit);
+            neMsg = ne.initiate();
+        } else {
+            Negentropy ne(storageVector, frameSizeLimit);
+            neMsg = ne.initiate();
+        }
+
         ws.send(tao::json::to_string(tao::json::value::array({
             "NEG-OPEN",
             "N",
-            filter,
-            idSize,
-            neMsg,
+            filterJson,
+            to_hex(neMsg),
         })));
     };
 
@@ -114,13 +151,15 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
     const uint64_t batchSizeDown = 50;
     uint64_t inFlightUp = 0;
     bool inFlightDown = false; // bool because we can't count on getting every EVENT we request (might've been deleted mid-query)
-    std::vector<std::string> have, need;
+    std::vector<Bytes32> have, need;
+    flat_hash_set<Bytes32> seenHave, seenNeed;
     bool syncDone = false;
     uint64_t totalHaves = 0, totalNeeds = 0;
     Decompressor decomp;
 
     ws.onMessage = [&](auto msgStr, uWS::OpCode opCode, size_t compressedSize){
         try {
+            auto txn = env.txn_ro();
             tao::json::value msg = tao::json::from_string(msgStr);
 
             if (msg.at(0) == "NEG-MSG") {
@@ -129,7 +168,38 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 std::optional<std::string> neMsg;
 
                 try {
-                    neMsg = ne.reconcile(from_hex(msg.at(2).get_string()), have, need);
+                    auto inputMsg = from_hex(msg.at(2).get_string());
+
+                    std::vector<std::string> currHave, currNeed;
+
+                    if (treeId) {
+                        negentropy::storage::BTreeLMDB storageBtree(txn, negentropyDbi, *treeId);
+
+                        const auto &f = filterCompiled.filters.at(0);
+                        negentropy::storage::SubRange subStorage(storageBtree, negentropy::Bound(f.since), negentropy::Bound(f.until == MAX_U64 ? MAX_U64 : f.until + 1));
+
+                        Negentropy ne(subStorage, frameSizeLimit);
+                        ne.setInitiator();
+                        neMsg = ne.reconcile(inputMsg, currHave, currNeed);
+                    } else {
+                        Negentropy ne(storageVector, frameSizeLimit);
+                        ne.setInitiator();
+                        neMsg = ne.reconcile(inputMsg, currHave, currNeed);
+                    }
+
+                    for (auto &idStr : currHave) {
+                        Bytes32 id(idStr);
+                        if (seenHave.contains(id)) continue;
+                        seenHave.insert(id);
+                        have.push_back(id);
+                    }
+
+                    for (auto &idStr : currNeed) {
+                        Bytes32 id(idStr);
+                        if (seenNeed.contains(id)) continue;
+                        seenNeed.insert(id);
+                        need.push_back(id);
+                    }
                 } catch (std::exception &e) {
                     LE << "Unable to parse negentropy message from relay: " << e.what();
                     doExit(1);
@@ -167,9 +237,9 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 auto &evJson = msg.at(2);
 
                 std::string okMsg;
-                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, hoytech::curr_time_us(), EventSourceType::Sync, ws.remoteAddr, okMsg);
+                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, EventSourceType::Sync, ws.remoteAddr, okMsg);
                 if (res == PluginEventSifterResult::Accept) {
-                    writer.write({ std::move(evJson), EventSourceType::Sync, url });
+                    writer.write({ std::move(evJson), });
                 } else {
                     if (okMsg.size()) LI << "[" << ws.remoteAddr << "] write policy blocked event " << evJson.at("id").get_string() << ": " << okMsg;
                 }
@@ -196,7 +266,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
                 auto id = std::move(have.back());
                 have.pop_back();
 
-                auto ev = lookupEventById(txn, id);
+                auto ev = lookupEventById(txn, id.sv());
                 if (!ev) {
                     LW << "Couldn't upload event because not found (deleted?)";
                     continue;
@@ -218,7 +288,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
             tao::json::value ids = tao::json::empty_array;
 
             while (need.size() > 0 && ids.get_array().size() < batchSizeDown) {
-                ids.emplace_back(to_hex(need.back()));
+                ids.emplace_back(to_hex(need.back().sv()));
                 need.pop_back();
             }
 
